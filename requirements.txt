@@ -1,0 +1,6 @@
+yfinance
+lightgbm
+pandas
+numpy
+scikit-learn
+defusedxml
