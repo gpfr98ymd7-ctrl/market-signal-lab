@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Market Lab">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>Market Lab</title>
+<style>
+:root {
+  --bg: #f4f6fa; --card: #ffffff; --ink: #0f172a; --muted: #5b6b82; --line: #e2e8f0;
+  --accent: #0d9488; --good: #15803d; --warn: #b45309; --bad: #b91c1c;
+  --good-bg: #dcfce7; --warn-bg: #fef3c7; --bad-bg: #fee2e2; --chip: #e9eef5; --info-bg: #e0f2fe; --info: #0369a1;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1120; --card: #131c2e; --ink: #e5e9f0; --muted: #98a6bb; --line: #243049;
+    --accent: #2dd4bf; --good: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --good-bg: #14301f; --warn-bg: #3a2c0c; --bad-bg: #3b1616; --chip: #243049; --info-bg: #10304a; --info: #7dd3fc;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+body { padding: 0 16px calc(32px + env(safe-area-inset-bottom)); max-width: 640px; margin: 0 auto; overflow-wrap: anywhere; }
+.kv span:last-child, .grid3 > div, .glance > div, .cmp > div { min-width: 0; }
+header { padding-top: calc(14px + env(safe-area-inset-top)); }
+h1 { font-size: 22px; margin: 4px 0 2px; }
+h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 22px 0 10px; }
+h3 { font-size: 17px; margin: 0; }
+h4 { font-size: 14px; margin: 14px 0 4px; }
+p { margin: 6px 0; }
+a { color: var(--accent); }
+.sub { color: var(--muted); font-size: 13px; }
+.tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; padding: 10px 0 8px; margin: 8px 0 0;
+  background: var(--bg); border-bottom: 1px solid var(--line); }
+.tabs a { flex: 1; text-align: center; text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 600;
+  padding: 8px 4px; border-radius: 10px; background: transparent; }
+.tabs a.on { background: var(--card); color: var(--ink); border: 1px solid var(--line); padding: 7px 3px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 4px; }
+.k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.v { font-size: 22px; font-weight: 650; }
+.s { font-size: 12px; color: var(--muted); }
+.note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+.dim { opacity: .55; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; display: inline-block; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.info { background: var(--info-bg); color: var(--info); }
+.banner { border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: 14px; }
+.banner.warn { background: var(--warn-bg); color: var(--warn); }
+.banner.bad { background: var(--bad-bg); color: var(--bad); }
+.banner.info { background: var(--info-bg); color: var(--info); }
+.banner ul { margin: 4px 0 0; padding-left: 18px; }
+.headline { font-size: 16px; line-height: 1.5; }
+.range { position: relative; height: 26px; margin: 10px 0 2px; }
+.range .track { position: absolute; left: 0; right: 0; top: 12px; height: 2px; background: var(--line); }
+.range .zero { position: absolute; top: 4px; bottom: 4px; width: 1px; background: var(--muted); opacity: .6; }
+.range .w { position: absolute; top: 11px; height: 4px; border-radius: 2px; background: var(--accent); opacity: .35; }
+.range .b { position: absolute; top: 5px; height: 16px; border-radius: 4px; background: var(--accent); opacity: .55; }
+.range .m { position: absolute; top: 3px; height: 20px; width: 3px; border-radius: 2px; background: var(--ink); }
+.rl { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.meter { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 6px 0 2px; }
+.meter > div { height: 100%; background: var(--accent); border-radius: 999px; }
+.spark { display: block; width: 100%; height: 44px; color: var(--accent); }
+.spark.exp { height: 30px; }
+.stock { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.stock:first-of-type { border-top: 0; }
+.rank { color: var(--muted); font-size: 13px; text-align: center; }
+.tick { font-weight: 650; }
+.right { text-align: right; }
+.sel { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 10px; }
+.chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--chip); margin-left: 6px; font-weight: 500; }
+.chip.new { background: var(--info-bg); color: var(--info); }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.kv:first-of-type { border-top: 0; }
+.kv span:first-child { color: var(--muted); }
+.kv span:last-child { text-align: right; }
+.cmp { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 4px 8px; font-size: 14px; margin-top: 6px; }
+.cmp .hd { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.cmp .n { text-align: right; }
+.glance { display: grid; grid-template-columns: 1.2fr 1fr .8fr; gap: 6px 8px; align-items: center; font-size: 14px; }
+.glance .hd { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.glance .n { text-align: right; font-variant-numeric: tabular-nums; }
+.news { padding: 8px 0; border-top: 1px solid var(--line); }
+.news:first-of-type { border-top: 0; }
+.news a { color: var(--ink); text-decoration: none; font-weight: 550; }
+details { margin-top: 10px; }
+summary { cursor: pointer; font-size: 14px; color: var(--accent); font-weight: 600; padding: 4px 0; }
+ul.plain { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
+.foot { color: var(--muted); font-size: 12px; margin-top: 24px; }
+button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 8px 12px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.legend svg { width: 22px; height: 8px; vertical-align: middle; margin-right: 4px; }
+</style>
+</head>
+<body>
+<noscript><p>This page needs JavaScript to show the forecasts.</p></noscript>
+<div id="app"><p class="sub">Loading...</p></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ------------------------------------------------------------------ helpers
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function isNum(x) { return typeof x === "number" && isFinite(x); }
+  function pct(x, d) { return isNum(x) ? (x * 100).toFixed(d == null ? 0 : d) + "%" : "n/a"; }
+  function num(x, d) { return isNum(x) ? x.toFixed(d == null ? 1 : d) : "n/a"; }
+  function signed(x, d) { return isNum(x) ? (x >= 0 ? "+" : "") + x.toFixed(d == null ? 1 : d) + "%" : "n/a"; }
+  function mult(x) { return isNum(x) ? "x" + x.toFixed(2) : "n/a"; }
+  function clamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+  function safeUrl(u) { return typeof u === "string" && /^https?:\/\//i.test(u) ? u : null; }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function kv(a, b) { return '<div class="kv"><span>' + a + '</span><span>' + b + '</span></div>'; }
+  function paragraphs(t) {
+    return String(t == null ? "" : t).split(/\n{2,}/).map(function (p) {
+      return p.trim() ? "<p>" + esc(p.trim()).replace(/\n/g, "<br>") + "</p>" : "";
+    }).join("");
+  }
+
+  function regimeClass(r) {
+    if (/stressed/i.test(r) && /down/i.test(r)) return "bad";
+    if (/stressed/i.test(r)) return "warn";
+    if (/up/i.test(r)) return "good";
+    return "";
+  }
+
+  var SKILL = {
+    direction: { none: ["no proven edge", ""], weak: ["weak edge", "warn"], some: ["some edge", "good"] },
+    vol: { none: ["no gain vs naive", ""], modest: ["modest gain", "warn"], useful: ["useful gain", "good"] },
+    crash: { none: ["no proven edge", ""], modest: ["modest edge", "warn"], useful: ["useful edge", "good"] }
+  };
+  function skillPill(kind, h) {
+    if (!h || !h.available) return '<span class="pill">unchecked</span>';
+    var e = SKILL[kind][h[kind]];
+    return e ? '<span class="pill ' + e[1] + '">' + e[0] + '</span>' : '<span class="pill">unchecked</span>';
+  }
+
+  // ------------------------------------------------------------------ small charts
+  function spark(values, o) {
+    var v = arr(values).filter(isNum);
+    if (v.length < 2) return "";
+    o = o || {};
+    var lo = isNum(o.min) ? o.min : Math.min.apply(null, v);
+    var hi = isNum(o.max) ? o.max : Math.max.apply(null, v);
+    if (hi === lo) { hi += 1; lo -= 1; }
+    var pts = v.map(function (y, i) {
+      return (i / (v.length - 1) * 100).toFixed(2) + "," + (28 - (y - lo) / (hi - lo) * 26).toFixed(2);
+    }).join(" ");
+    return '<svg class="spark ' + (o.cls || "") + '" viewBox="0 0 100 30" preserveAspectRatio="none" role="img" aria-label="' + esc(o.label || "trend") + '">' +
+      '<polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
+  }
+
+  function curves(rows) {
+    rows = arr(rows);
+    if (rows.length < 2) return "";
+    var keys = [["scaled", "currentColor", ""], ["unscaled", "var(--warn)", "5 3"], ["universe", "var(--muted)", "1.5 3"]];
+    var all = [];
+    rows.forEach(function (r) { keys.forEach(function (k) { if (isNum(r[k[0]])) all.push(r[k[0]]); }); });
+    var lo = Math.min.apply(null, all.concat([1])), hi = Math.max.apply(null, all.concat([1]));
+    if (hi === lo) { hi += 0.01; lo -= 0.01; }
+    function line(k) {
+      var pts = rows.map(function (r, i) {
+        return (i / (rows.length - 1) * 100).toFixed(2) + "," + (58 - (r[k[0]] - lo) / (hi - lo) * 54).toFixed(2);
+      }).join(" ");
+      return '<polyline points="' + pts + '" fill="none" stroke="' + k[1] + '" stroke-width="1.6" ' + (k[2] ? 'stroke-dasharray="' + k[2] + '" ' : "") +
+        'vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
+    }
+    var base = 58 - (1 - lo) / (hi - lo) * 54;
+    return '<svg class="spark" style="height:90px" viewBox="0 0 100 60" preserveAspectRatio="none" role="img" aria-label="Growth of 1 for each live portfolio">' +
+      '<line x1="0" x2="100" y1="' + base.toFixed(2) + '" y2="' + base.toFixed(2) + '" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
+      keys.map(line).join("") + '</svg>' +
+      '<div class="legend"><span><svg viewBox="0 0 22 8"><line x1="0" x2="22" y1="4" y2="4" stroke="currentColor" stroke-width="2" style="color:var(--accent)"/></svg>scaled by market risk</span>' +
+      '<span><svg viewBox="0 0 22 8"><line x1="0" x2="22" y1="4" y2="4" stroke="var(--warn)" stroke-width="2" stroke-dasharray="5 3"/></svg>unscaled</span>' +
+      '<span><svg viewBox="0 0 22 8"><line x1="0" x2="22" y1="4" y2="4" stroke="var(--muted)" stroke-width="2" stroke-dasharray="1.5 3"/></svg>equal-weight universe</span></div>';
+  }
+
+  function rangeBar(rg, ax) {
+    function pos(v) { return clamp(50 + 50 * (v / ax), 0, 100); }
+    var l5 = pos(rg.p5), l25 = pos(rg.p25), l50 = pos(rg.p50), l75 = pos(rg.p75), l95 = pos(rg.p95);
+    return '<div class="range">' +
+      '<div class="track"></div><div class="zero" style="left:50%"></div>' +
+      '<div class="w" style="left:' + l5 + '%;width:' + (l95 - l5) + '%"></div>' +
+      '<div class="b" style="left:' + l25 + '%;width:' + (l75 - l25) + '%"></div>' +
+      '<div class="m" style="left:calc(' + l50 + '% - 1px)"></div></div>' +
+      '<div class="rl"><span>' + signed(rg.p5) + '</span><span>median ' + signed(rg.p50) + '</span><span>' + signed(rg.p95) + '</span></div>';
+  }
+
+  // ------------------------------------------------------------------ banners
+  function banners(d) {
+    var out = "";
+    if (d.demo) {
+      out += '<div class="banner info"><strong>Demo data.</strong> These are made-up prices so you can see how the app looks. The first real weekly run replaces them. Nothing here is a real forecast.</div>';
+    } else {
+      var ageDays = (Date.now() - Date.parse(String(d.generated_utc).replace(" ", "T") + ":00Z")) / 86400000;
+      if (isNum(ageDays) && ageDays > 9) {
+        out += '<div class="banner bad">This data is ' + Math.floor(ageDays) + ' days old. The weekly job may have stopped: check the Actions tab on GitHub.</div>';
+      }
+    }
+    if (d.schema !== 2) {
+      out += '<div class="banner warn">This page was written for data format 2 but the data is format ' + esc(d.schema) + '. Close and reopen the app, and re-upload the project if it persists.</div>';
+    }
+    if (d.health && d.health.available === false) {
+      out += '<div class="banner warn">The model health check has not run yet, so probabilities use a default 50% shrink toward base rates. It runs automatically with the weekly job.</div>';
+    }
+    var w = arr(d.data_warnings);
+    if (w.length) {
+      out += '<div class="banner warn"><strong>' + w.length + ' data warning' + (w.length > 1 ? "s" : "") + '</strong><ul>' +
+        w.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + '</ul></div>';
+    }
+    return out;
+  }
+
+  // ------------------------------------------------------------------ overview
+  function changesCard(d) {
+    var c = d.changes || {};
+    if (!c.previous_run) {
+      return '<section class="card"><h3>Since last run</h3><p class="note">This is the first run. Week-on-week changes appear after the next one.</p></section>';
+    }
+    var rows = arr(c.markets).map(function (m) {
+      var dlt = m.exposure_delta, flag = "";
+      var regime = m.regime_from !== m.regime_to
+        ? '<div class="s" style="padding:0 0 6px">Regime: ' + esc(m.regime_from) + " &rarr; " + esc(m.regime_to) + "</div>" : "";
+      if (isNum(dlt) && Math.abs(dlt) < 0.005) flag = "unchanged";
+      else if (isNum(dlt)) flag = (dlt > 0 ? "up " : "down ") + Math.abs(dlt * 100).toFixed(0) + " pts";
+      return '<div class="kv" style="white-space:nowrap"><span>' + esc(m.name) + '</span><span>exposure ' + pct(m.exposure_from) + ", " + esc(flag) + '</span></div>' + regime;
+    }).join("");
+    var ent = arr(c.entered), ex = arr(c.exited);
+    var picks = (ent.length || ex.length)
+      ? kv("Stocks added", ent.length ? esc(ent.join(", ")) : "none") + kv("Stocks dropped", ex.length ? esc(ex.join(", ")) : "none")
+      : kv("Stock picks", "unchanged");
+    var turn = isNum(c.turnover) ? kv("Portfolio turnover", pct(c.turnover) + " (about " + num(c.est_cost_pct, 2) + "% cost at " + esc((d.portfolio || {}).cost_bps) + " bps)") : "";
+    return '<section class="card"><h3>Since last run <span class="s">(' + esc(c.previous_run) + ')</span></h3>' + rows + picks + turn + '</section>';
+  }
+
+  function glance(d) {
+    var rows = arr(d.markets).map(function (m) {
+      return '<div>' + esc(m.name) + '</div><div><span class="pill ' + regimeClass(m.regime) + '">' + esc(m.regime) + '</span></div>' +
+        '<div class="n"><strong>' + mult(m.exposure) + '</strong></div>';
+    }).join("");
+    return '<section class="card"><h3>Markets at a glance</h3><p class="note" style="margin-top:2px">Suggested exposure comes from a rule-based risk scaler (0.25 to 1.00). It is a way to size risk, not a call on direction.</p>' +
+      '<div class="glance" style="margin-top:8px"><div class="hd">Market</div><div class="hd">Regime</div><div class="hd n">Exposure</div>' + rows + '</div></section>';
+  }
+
+  function outlookCard(d) {
+    var o = d.outlook;
+    if (!o || !o.text) return "";
+    return '<section class="card"><div class="row"><h3>Weekly commentary</h3><span class="pill info">AI-written</span></div>' +
+      paragraphs(o.text) +
+      '<p class="s">Written by ' + esc(o.model || "Claude") + ' from this week\'s numbers and public headlines. It never changes a forecast and is not advice. Headlines are untrusted text.</p></section>';
+  }
+
+  function headlinesCard(d) {
+    var h = arr(d.headlines);
+    if (!h.length) return "";
+    var items = h.map(function (x) {
+      var u = safeUrl(x.link);
+      var t = u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' + esc(x.title) + '</a>' : '<span>' + esc(x.title) + '</span>';
+      return '<div class="news">' + t + '<div class="s">' + esc(x.source) + (x.published ? " | " + esc(x.published) + " UTC" : "") + '</div></div>';
+    }).join("");
+    return '<section class="card"><h3>In the news</h3><p class="note" style="margin-top:2px">Context only. The model does not read the news.</p>' + items + '</section>';
+  }
+
+  function tabOverview(d) {
+    var alerts = arr(d.alerts);
+    var al = alerts.length
+      ? '<div class="banner bad"><strong>' + alerts.length + ' alert' + (alerts.length > 1 ? "s" : "") + '</strong><ul>' +
+        alerts.map(function (a) { return "<li>" + esc(a.text) + "</li>"; }).join("") + '</ul></div>'
+      : '<div class="banner info">No alerts this week.</div>';
+    return '<section class="card"><div class="k">This week</div><p class="headline">' + esc(d.headline) + '</p></section>' +
+      al + changesCard(d) + glance(d) + outlookCard(d) + headlinesCard(d);
+  }
+
+  // ------------------------------------------------------------------ markets
+  function tile(label, value, sub, pill, o) {
+    o = o || {};
+    return '<div class="' + (o.dim ? "dim" : "") + '"><div class="k">' + label + '</div>' +
+      '<div class="v"' + (o.color ? ' style="color:' + o.color + '"' : "") + '>' + value + '</div>' +
+      '<div class="s">' + sub + '</div><div style="margin-top:4px">' + pill + '</div></div>';
+  }
+
+  function marketCard(m, ax, days) {
+    var h = m.health || {}, ok = h.available;
+    var dirNone = ok && h.direction === "none";
+    var crashHigh = ok && h.crash !== "none" && m.base_crash > 0 && m.p_crash > 1.5 * m.base_crash;
+    var volUp = m.vol_now > 0 && m.pred_vol > 1.2 * m.vol_now;
+    var widen = ok && isNum(h.k_range) && h.k_range > 1.05
+      ? " Widened x" + num(h.k_range, 2) + " so the 90% range has contained the outcome about 90% of the time in testing." : "";
+    var hist = arr(m.history).map(function (x) { return x.exposure; });
+    var expSpark = hist.length > 1
+      ? '<div class="k" style="margin-top:10px">Suggested exposure, recent weeks</div>' + spark(hist, { min: 0, max: 1, cls: "exp", label: "Suggested exposure by week for " + m.name })
+      : "";
+    return '<section class="card">' +
+      '<div class="row"><h3>' + esc(m.name) + '</h3><span class="pill ' + regimeClass(m.regime) + '">' + esc(m.regime) + '</span></div>' +
+      '<div class="grid3">' +
+        tile("Higher in " + days + "d", pct(m.p_up), "base rate " + pct(m.base_up), skillPill("direction", h), { dim: dirNone }) +
+        tile("Crash risk", pct(m.p_crash), "normal " + pct(m.base_crash), skillPill("crash", h), { color: crashHigh ? "var(--bad)" : "" }) +
+        tile("Volatility", pct(m.pred_vol), "now " + pct(m.vol_now), skillPill("vol", h), { color: volUp ? "var(--warn)" : "" }) +
+      '</div>' +
+      (dirNone ? '<p class="note">Direction odds sit near the base rate because the model\'s direction calls have not beaten chance in testing.</p>' : "") +
+      '<div class="k" style="margin-top:12px">' + days + '-day range (5-95%, box 25-75%)</div>' + rangeBar(m.range_pct || {}, ax) +
+      (widen ? '<p class="note">' + esc(widen.trim()) + '</p>' : "") +
+      '<div class="k" style="margin-top:12px">Risk scaler: suggested exposure ' + mult(m.exposure) + '</div>' +
+      '<div class="meter"><div style="width:' + clamp((m.exposure || 0) * 100, 0, 100) + '%"></div></div>' +
+      '<div class="s">limits: crash ' + num(m.crash_mult, 2) + ' / volatility ' + num(m.vol_mult, 2) + ' / regime ' + num(m.regime_cap, 2) + '</div>' +
+      expSpark +
+      '<div class="k" style="margin-top:10px">Price, last 6 months</div>' + spark(m.px_hist, { label: "Price of " + m.name + " over six months" }) +
+      '<details><summary>Raw model output</summary>' +
+        kv("Raw P(up) before shrinking", pct(m.p_up_raw, 1)) +
+        kv("Raw crash risk before shrinking", pct(m.p_crash_raw, 1)) +
+        (ok ? kv("Kept from the model: direction / crash", pct(h.lam_up) + " / " + pct(h.lam_crash)) : "") +
+      '</details></section>';
+  }
+
+  function tabMarkets(d) {
+    var days = (d.horizons || {}).market_days, ax = 1;
+    arr(d.markets).forEach(function (m) {
+      var r = m.range_pct || {};
+      ax = Math.max(ax, Math.abs(r.p5 || 0), Math.abs(r.p95 || 0));
+    });
+    ax = Math.ceil(ax);
+    return '<p class="note">Probabilities are pulled toward their long-run base rates by as much as the model has failed to earn that in testing. Pills show how each forecast has performed historically.</p>' +
+      arr(d.markets).map(function (m) { return marketCard(m, ax, days); }).join("");
+  }
+
+  // ------------------------------------------------------------------ stocks
+  function tabStocks(d) {
+    var sm = d.stock_model || {}, sh = sm.health, p = d.portfolio || {}, c = d.changes || {};
+    var isNew = {}; arr(c.entered).forEach(function (t) { isNew[t] = true; });
+    var label = sh
+      ? '<span class="pill ' + ({ none: "", weak: "warn", some: "good" }[sh.label] || "") + '">' +
+        ({ none: "no proven edge", weak: "weak edge", some: "some edge" }[sh.label] || "unchecked") + '</span>'
+      : '<span class="pill">unchecked</span>';
+    var rows = arr(d.stocks).map(function (s, i) {
+      var inPort = s.base_w > 0;
+      var flag = s.flag ? '<span class="chip">' + esc(s.flag) + '</span>' : "";
+      var nw = inPort && isNew[s.ticker] ? '<span class="chip new">new</span>' : "";
+      var w = inPort
+        ? '<div class="v" style="font-size:17px">' + pct(s.final_w, 1) + '</div><div class="s">of portfolio (' + pct(s.base_w, 1) + ' before scaling)</div>'
+        : '<div class="s">not selected</div>';
+      return '<div class="stock' + (inPort ? " sel" : "") + '">' +
+        '<div class="rank">' + (i + 1) + '</div>' +
+        '<div><span class="tick">' + esc(s.ticker) + '</span>' + nw + flag +
+          '<div class="s">beat-average odds ' + pct(s.p, 1) + ' | score ' + pct(s.p_raw, 1) + ' | 20d ' + signed(s.ret_20 * 100) + ' | vs market ' + signed(s.rs_20 * 100) + ' | vol ' + pct(s.vol_ann) + '</div></div>' +
+        '<div class="right">' + w + '</div></div>';
+    }).join("");
+    var delay = (d.horizons || {}).entry_delay;
+    return '<section class="card"><div class="row"><h3>Stock ranker</h3>' + label + '</div>' +
+      '<p class="note">Odds of beating the universe average over the next ' + esc((d.horizons || {}).stock_days) + ' trading days' +
+      (delay ? ", assuming you buy " + esc(delay) + " trading day" + (delay > 1 ? "s" : "") + " after the signal date" : "") +
+      '. Odds are pulled toward the ' + pct(sm.base, 1) + ' base rate (the model keeps ' + pct(sm.lam) + ' of its signal). The ranking itself uses the raw score.</p></section>' +
+      '<section class="card"><div class="s" style="margin-bottom:6px">Highlighted rows form the illustrative top-' + esc(p.top_k) + ' portfolio: invested ' + pct(p.invested) +
+      ', cash ' + pct(p.cash) + (isNum(p.turnover) ? '; turnover vs last run ' + pct(p.turnover) : "") + '.</div>' + rows + '</section>';
+  }
+
+  // ------------------------------------------------------------------ trust
+  function metricRows(h) {
+    var s = kv("Tested on", esc(h.first_test) + " to " + esc(h.last_test) + " (" + esc(h.n_days) + " days)");
+    s += kv("Direction: AUC (0.50 is a coin flip)", num(h.auc_up, 3) + ", keeps " + pct(h.lam_up) + " of signal");
+    s += kv("Crash risk: AUC", num(h.auc_crash, 3) + ", keeps " + pct(h.lam_crash) + " of signal");
+    s += kv("Volatility vs a naive guess", signed(h.vol_improve_pct) + " better");
+    s += kv("90% range contained outcome", pct(h.cov90_raw) + " raw, " + pct(h.cov90_cal) + " after widening x" + num(h.k_range, 2));
+    s += kv("50% range contained outcome", pct(h.cov50_raw) + " raw, " + pct(h.cov50_cal) + " after widening");
+    return s;
+  }
+
+  function honestRows(x) {
+    if (!x) return "";
+    return '<h4>Stricter test: calibration learned from earlier years only</h4>' +
+      kv("Period", esc(x.first) + " to " + esc(x.last) + " (" + esc(x.n_days) + " days)") +
+      kv("Direction skill vs base rate", isNum(x.brier_skill_up) ? signed(x.brier_skill_up * 100, 2) : "n/a") +
+      kv("Crash-risk skill vs base rate", isNum(x.brier_skill_crash) ? signed(x.brier_skill_crash * 100, 2) : "n/a") +
+      kv("Volatility vs naive", signed(x.vol_improve_pct) + " better") +
+      kv("90% / 50% ranges contained", pct(x.cov90) + " / " + pct(x.cov50));
+  }
+
+  function cmpRows(a, b, labelA, labelB) {
+    function cell(v, f) { return '<div class="n">' + f(v) + '</div>'; }
+    var rows = [
+      ["Annual return", "ann_return", function (v) { return pct(v, 1); }],
+      ["Annual volatility", "ann_vol", function (v) { return pct(v, 1); }],
+      ["Sharpe ratio", "sharpe", function (v) { return num(v, 2); }],
+      ["Worst drawdown", "max_drawdown", function (v) { return pct(v, 0); }]
+    ];
+    var out = '<div class="cmp"><div class="hd"></div><div class="hd n">' + labelA + '</div><div class="hd n">' + labelB + '</div>';
+    rows.forEach(function (r) {
+      out += '<div>' + r[0] + '</div>' + cell((a || {})[r[1]], r[2]) + cell((b || {})[r[1]], r[2]);
+    });
+    return out + '</div>';
+  }
+
+  function overlayBlock(o) {
+    if (!o) return "";
+    var extra = '<div class="cmp" style="margin-top:2px"><div>Average exposure</div><div class="n">100%</div><div class="n">' + pct((o.scaler || {}).avg_exposure) + '</div></div>';
+    return '<h4>Risk scaler versus buy and hold</h4>' +
+      cmpRows(o.buy_hold, o.scaler, "Buy and hold", "Scaler") + extra +
+      '<p class="note">' + esc(o.periods) + ' non-overlapping ' + esc((window.__days || 21)) + '-day periods, ' + esc(o.first) + ' to ' + esc(o.last) +
+      ', ' + esc(o.cost_bps) + ' bps cost on exposure changes.</p>';
+  }
+
+  function trustMarkets(d) {
+    var out = "";
+    arr(d.markets).forEach(function (m) {
+      var h = m.health || {};
+      out += '<section class="card"><div class="row"><h3>' + esc(m.name) + '</h3></div>';
+      if (!h.available) {
+        out += '<p class="note">No health check yet.</p></section>';
+        return;
+      }
+      out += '<div style="margin:6px 0">' + skillPill("direction", h) + " " + skillPill("crash", h) + " " + skillPill("vol", h) + '</div>' +
+        '<details><summary>Walk-forward results</summary>' + metricRows(h) + honestRows(h.honest) + overlayBlock(h.overlay) + '</details></section>';
+    });
+    return out;
+  }
+
+  function trustStocks(d) {
+    var sh = (d.stock_model || {}).health;
+    if (!sh) return '<section class="card"><h3>Stock ranker</h3><p class="note">No health check yet.</p></section>';
+    var bt = sh.backtest;
+    var out = '<section class="card"><div class="row"><h3>Stock ranker</h3><span class="pill ' + ({ none: "", weak: "warn", some: "good" }[sh.label] || "") + '">' +
+      ({ none: "no proven edge", weak: "weak edge", some: "some edge" }[sh.label] || "unchecked") + '</span></div>' +
+      kv("Tested on", esc(sh.first_test) + " to " + esc(sh.last_test)) +
+      kv("AUC (0.50 is a coin flip)", num(sh.auc, 3)) +
+      kv("Years with AUC above 0.50", esc(sh.years_above_half) + " of " + esc(sh.n_years)) +
+      kv("Top minus bottom third, per period", signed(sh.spread_pct, 2) + (isNum(sh.spread_t) ? " (t = " + num(sh.spread_t, 1) + ")" : "")) +
+      kv("Signal kept after shrinking", pct(sh.lam));
+    if (bt) {
+      out += '<h4>Top-' + esc(bt.top_k) + ' portfolio versus equal-weight universe</h4>' +
+        cmpRows(bt.strategy, bt.universe, "Top-" + esc(bt.top_k), "Universe") +
+        '<p class="note">' + esc(bt.periods) + ' periods, average turnover ' + pct(bt.avg_turnover) + ', ' + esc(bt.cost_bps) + ' bps cost on turnover.</p>';
+    }
+    return out + '</section>';
+  }
+
+  function scorecard(d) {
+    var sc = d.scorecard || {}, mk = sc.markets || {}, st = sc.stocks || {}, cb = sc.combined || {};
+    var out = '<div class="banner warn">' + esc(sc.runs) + ' weekly run' + (sc.runs === 1 ? "" : "s") + ' logged. Market forecasts look ' + esc(mk.horizon_days) +
+      ' days ahead and overlap from week to week, so ' + esc(mk.runs_scored) + ' scored run' + (mk.runs_scored === 1 ? "" : "s") + ' count for about ' + num(mk.effective_runs, 1) +
+      ' independent ones. Do not read much into these numbers before roughly 26 weeks.</div>';
+
+    out += '<section class="card"><h3>Live: markets</h3><div class="s" style="margin-bottom:6px">' + esc(mk.scored) + ' of ' + esc(mk.logged) + ' forecasts are old enough to score</div>';
+    if (mk.scored > 0) {
+      out += kv("Direction accuracy", pct(mk.direction_accuracy) + " (always-up: " + pct(mk.always_up_accuracy) + ")") +
+        kv("Volatility error", num(mk.vol_error_model, 3) + " vs naive " + num(mk.vol_error_naive, 3) + " (lower is better)") +
+        kv("Crash-risk skill", isNum(mk.crash_brier_skill) ? num(mk.crash_brier_skill, 3) : "n/a") +
+        kv("90% range held", pct(mk.coverage_90) + " (target 90%)") +
+        kv("50% range held", pct(mk.coverage_50) + " (target 50%)");
+    } else {
+      out += '<div class="s">Market forecasts need ' + esc(mk.horizon_days) + ' trading days to pass before they can be scored.</div>';
+    }
+    out += '</section>';
+
+    out += '<section class="card"><h3>Live: stocks</h3><div class="s" style="margin-bottom:6px">' + esc(st.scored) + ' of ' + esc(st.logged) + ' forecasts are old enough to score</div>';
+    if (st.scored > 0 && st.avg_excess_pct) {
+      ["top", "middle", "bottom"].forEach(function (k) {
+        if (isNum(st.avg_excess_pct[k])) out += kv("Avg " + esc(st.horizon_days) + "d excess return, " + k + " third", signed(st.avg_excess_pct[k], 2));
+      });
+      if (isNum(st.spread_mean_pct)) out += kv("Top minus bottom", signed(st.spread_mean_pct, 2) + " over " + esc(st.spread_runs) + " run" + (st.spread_runs === 1 ? "" : "s") + (isNum(st.spread_hit_rate) ? ", positive " + pct(st.spread_hit_rate) : ""));
+      if (isNum(st.spread_t)) out += kv("t-statistic", num(st.spread_t, 2));
+      if (isNum(st.auc)) out += kv("AUC", num(st.auc, 3));
+    } else {
+      out += '<div class="s">Stock forecasts need ' + esc(st.horizon_days) + ' trading days after the entry day to pass before they can be scored.</div>';
+    }
+    out += '</section>';
+
+    out += '<section class="card"><h3>Live: portfolios after costs</h3>';
+    if (cb.weeks > 0) {
+      out += '<div class="s" style="margin-bottom:6px">Growth of 1 over ' + esc(cb.weeks) + ' scored week' + (cb.weeks === 1 ? "" : "s") + ', ' + esc(sc.cost_bps) + ' bps cost on turnover, cash earns 0</div>' +
+        kv("Top picks, scaled by market risk", num(cb.scaled, 4)) +
+        kv("Top picks, unscaled", num(cb.unscaled, 4)) +
+        kv("Equal-weight universe", num(cb.universe, 4)) + curves(cb.curve);
+    } else {
+      out += '<div class="s">Appears once stock forecasts have been scored.</div>';
+    }
+    return out + '</section>';
+  }
+
+  function tabTrust(d) {
+    var hl = (d.health || {}).updated;
+    return '<section class="card"><h3>How much should you trust this?</h3>' +
+      '<p class="note">Every forecast below was tested the honest way: the model predicts each year using only earlier data (a walk-forward test). The results decide how far probabilities are pulled toward base rates and how much the return ranges are widened.' +
+      (hl ? " Health check last run " + esc(hl) + "." : "") + '</p></section>' +
+      '<h2>Markets: historical test</h2>' + trustMarkets(d) +
+      '<h2>Stocks: historical test</h2>' + trustStocks(d) +
+      '<h2>Live scorecard</h2>' + scorecard(d) +
+      '<h2>Known limits</h2><section class="card"><ul class="plain">' +
+      '<li>Index trades are assumed to happen at the close the signal was computed on.</li>' +
+      '<li>The stock list is today\'s large companies, so history is flattered by survivorship bias.</li>' +
+      '<li>Cash earns nothing, and there are no taxes, spreads or market impact beyond the flat cost.</li>' +
+      '<li>Past results, however carefully tested, do not predict future returns.</li></ul></section>';
+  }
+
+  // ------------------------------------------------------------------ shell
+  var TABS = [["overview", "Overview"], ["markets", "Markets"], ["stocks", "Stocks"], ["trust", "Trust"]];
+  var DATA = null;
+
+  function currentTab() {
+    var h = (window.location.hash || "").replace("#", "");
+    return TABS.some(function (t) { return t[0] === h; }) ? h : "overview";
+  }
+
+  function render() {
+    var d = DATA, tab = currentTab();
+    window.__days = (d.horizons || {}).market_days;
+    var body = tab === "markets" ? tabMarkets(d) : tab === "stocks" ? tabStocks(d) : tab === "trust" ? tabTrust(d) : tabOverview(d);
+    var nav = '<nav class="tabs" aria-label="Sections">' + TABS.map(function (t) {
+      return '<a href="#' + t[0] + '"' + (t[0] === tab ? ' class="on" aria-current="page"' : "") + '>' + t[1] + '</a>';
+    }).join("") + '</nav>';
+    document.getElementById("app").innerHTML =
+      '<header><div class="row"><h1>Market Lab</h1><button id="refresh" type="button">Refresh</button></div>' +
+      '<div class="sub">Data through ' + esc(d.data_through) + ' | generated ' + esc(d.generated_utc) + ' UTC | v' + esc(d.version) + '</div>' +
+      banners(d) + '</header>' + nav + '<main>' + body +
+      '<p class="foot">Research tool only, not financial advice. Forecasts are probabilities, not promises; direction in particular is a weak signal. Do not risk money you cannot afford to lose on the basis of this page.</p></main>';
+    var b = document.getElementById("refresh");
+    if (b) b.onclick = function () { window.location.reload(); };
+  }
+
+  function fail(msg) {
+    document.getElementById("app").innerHTML =
+      '<header><h1>Market Lab</h1></header><div class="banner warn">' + esc(msg) + '</div>' +
+      '<p class="sub">If this is your first time: open the Actions tab on GitHub, choose "Weekly forecast", and tap "Run workflow". Come back in about 15 minutes.</p>';
+  }
+
+  window.addEventListener("hashchange", function () { if (DATA) { render(); window.scrollTo(0, 0); } });
+
+  fetch("data/latest.json?ts=" + Date.now())
+    .then(function (r) { if (!r.ok) throw new Error("No forecast data yet."); return r.json(); })
+    .then(function (d) { DATA = d; render(); })
+    .catch(function (e) { fail((e && e.message) || "Could not load data."); });
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
