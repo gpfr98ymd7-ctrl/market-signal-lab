@@ -1,0 +1,28 @@
+name: Tests
+
+# Runs the test suite whenever the code changes (for example after you edit settings from your phone).
+# It uses synthetic data only, so it needs no network access to market data.
+on:
+  push:
+    paths:
+      - "marketlab/**"
+      - "run_weekly.py"
+      - "tests/**"
+      - "requirements*.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
