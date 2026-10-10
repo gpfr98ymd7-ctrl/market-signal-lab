@@ -1,0 +1,78 @@
+name: Weekly forecast
+
+on:
+  schedule:
+    # Fridays 21:30 UTC: after the US close in both summer and winter time
+    - cron: "30 21 * * 5"
+  workflow_dispatch:   # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-forecast
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run forecasts
+        env:
+          # Optional: enables the AI-written weekly commentary. Leave the secret unset to skip it.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python run_weekly.py
+
+      - name: Show summary
+        run: |
+          {
+            echo '### Weekly forecast'
+            echo
+            cat summary.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit results
+        run: |
+          git config user.name "market-lab-bot"
+          git config user.email "market-lab-bot@users.noreply.github.com"
+          git add data docs/data
+          git diff --staged --quiet && exit 0
+          git commit -m "Weekly run $(date -u +%F)"
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && exit 0
+            sleep 5
+          done
+          echo "Could not push the results after 3 attempts" >&2
+          exit 1
+
+      - name: Phone notification (optional)
+        if: ${{ env.NTFY_TOPIC != '' }}
+        run: |
+          TITLE=$(head -n 1 summary.txt)
+          BODY=$(tail -n +2 summary.txt)
+          PRIORITY=$(cat alert_level.txt 2>/dev/null || echo default)
+          curl -s -H "Title: $TITLE" -H "Priority: $PRIORITY" \
+            -H "Click: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" \
+            -d "$BODY" "https://ntfy.sh/$NTFY_TOPIC"
+
+      - name: Phone notification on failure (optional)
+        if: ${{ failure() && env.NTFY_TOPIC != '' }}
+        run: |
+          curl -s -H "Title: Market Lab run FAILED" -H "Priority: high" \
+            -H "Click: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d "The weekly run failed. Tap to open the log. Re-running it from the Actions tab often fixes temporary data problems." \
+            "https://ntfy.sh/$NTFY_TOPIC"
