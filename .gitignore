@@ -1,0 +1,5 @@
+summary.txt
+alert_level.txt
+__pycache__/
+*.pyc
+.pytest_cache/
