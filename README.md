@@ -30,10 +30,9 @@ You need the GitHub website (or app) and a Google Colab session. Nothing needs a
 
 ### 3. Upload the project with the deploy notebook
 1. Open `deploy_to_github.ipynb` in Google Colab.
-2. Tap the key icon (Secrets), add a secret named `GITHUB_TOKEN`, paste the token, and enable notebook access.
-3. In the first cell, set `OWNER` to your GitHub username (and `REPO` if you used another name).
-4. **Runtime > Run all.** Every file should print `OK` or `kept`.
-5. Go back to GitHub and delete the token (Settings > Developer settings > Fine-grained tokens), since it is no longer needed.
+2. Tap **Runtime > Run all**. When asked, type your GitHub username, then paste the token (it is hidden as you type) and press Enter. If your repository is not called `market-signal-lab`, change `REPO` in the first cell. (A Colab secret named `GITHUB_TOKEN` also works but is not required, and the phone view of Colab has no Secrets panel.)
+3. Every file should print `OK` or `kept`.
+4. Go back to GitHub and delete the token (Settings > Developer settings > Fine-grained tokens), since it is no longer needed.
 
 You can run the deploy notebook again later to receive updates. It never overwrites your forecast log, your results, or your edited `marketlab/config.py` (see "Updating" below).
 
