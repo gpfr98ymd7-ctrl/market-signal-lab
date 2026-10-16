@@ -14,6 +14,11 @@ on:
 permissions:
   contents: read
 
+# When several pushes arrive in a row (for example while the project is being uploaded), only the newest is tested.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
