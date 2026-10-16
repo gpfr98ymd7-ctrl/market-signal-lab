@@ -61,6 +61,38 @@ def parse_rss(xml_bytes, source):
     return out
 
 
+def memoize(fetcher=None):
+    """Wrap a fetcher so each URL is requested once per run, however many times it is asked for."""
+    inner, cache = fetcher or _http_get, {}
+
+    def get(url):
+        if url not in cache:
+            cache[url] = inner(url)
+        return cache[url]
+    return get
+
+
+def fetch_all(feeds=None, fetcher=None, now=None, log=print, max_age_days=7):
+    """Every recent, de-duplicated item from the feeds, untrimmed and with real timestamps. Used for the archive."""
+    fetcher = fetcher or _http_get
+    now = pd.Timestamp(now) if now is not None else pd.Timestamp.now(tz="UTC").tz_localize(None)
+    cutoff = now - pd.Timedelta(days=max_age_days)
+    seen, out = set(), []
+    for name, url in (feeds or FEEDS):
+        try:
+            items = parse_rss(fetcher(url), name)
+        except Exception as e:
+            log(f"Headlines archive: {name} unavailable ({type(e).__name__})")
+            continue
+        for it in items:
+            key = (name, it["title"].lower())
+            if key in seen or (it["published"] is not None and it["published"] < cutoff):
+                continue
+            seen.add(key)
+            out.append(it)
+    return out
+
+
 def fetch(feeds=None, fetcher=None, now=None, log=print):
     """Recent, de-duplicated headlines, newest first, spread across sources. Returns [] on any problem."""
     fetcher = fetcher or _http_get
