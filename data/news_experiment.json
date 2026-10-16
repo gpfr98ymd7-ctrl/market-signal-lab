@@ -1,0 +1,10 @@
+{
+ "computed": "2026-10-16",
+ "design": 2,
+ "result": {
+  "available": false,
+  "reason": "No news history yet.",
+  "have_days": 0,
+  "need_days": 1100
+ }
+}
