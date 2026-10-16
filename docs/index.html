@@ -51,7 +51,7 @@ a { color: var(--accent); }
 .s { font-size: 12px; color: var(--muted); }
 .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
 .dim { opacity: .55; }
-.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; display: inline-block; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .pill.good { background: var(--good-bg); color: var(--good); }
 .pill.warn { background: var(--warn-bg); color: var(--warn); }
 .pill.bad { background: var(--bad-bg); color: var(--bad); }
@@ -73,11 +73,16 @@ a { color: var(--accent); }
 .meter > div { height: 100%; background: var(--accent); border-radius: 999px; }
 .spark { display: block; width: 100%; height: 44px; color: var(--accent); }
 .spark.exp { height: 30px; }
-.stock { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.spark.mini { height: 24px; }
+.newsrow { padding: 8px 0; border-top: 1px solid var(--line); }
+.newsrow:first-of-type { border-top: 0; }
+.newsrow .row { flex-wrap: wrap; }
+.stock { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 92px); gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 .stock:first-of-type { border-top: 0; }
 .rank { color: var(--muted); font-size: 13px; text-align: center; }
 .tick { font-weight: 650; }
 .right { text-align: right; }
+.right .s { font-size: 11px; }
 .sel { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 10px; }
 .chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--chip); margin-left: 6px; font-weight: 500; }
 .chip.new { background: var(--info-bg); color: var(--info); }
@@ -121,6 +126,7 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
   function pct(x, d) { return isNum(x) ? (x * 100).toFixed(d == null ? 0 : d) + "%" : "n/a"; }
   function num(x, d) { return isNum(x) ? x.toFixed(d == null ? 1 : d) : "n/a"; }
   function signed(x, d) { return isNum(x) ? (x >= 0 ? "+" : "") + x.toFixed(d == null ? 1 : d) + "%" : "n/a"; }
+  function sgn(x, d) { return isNum(x) ? (x >= 0 ? "+" : "") + x.toFixed(d == null ? 3 : d) : "n/a"; }
   function mult(x) { return isNum(x) ? "x" + x.toFixed(2) : "n/a"; }
   function clamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
   function safeUrl(u) { return typeof u === "string" && /^https?:\/\//i.test(u) ? u : null; }
@@ -275,6 +281,35 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
     return '<section class="card"><h3>In the news</h3><p class="note" style="margin-top:2px">Context only. The model does not read the news.</p>' + items + '</section>';
   }
 
+  // ------------------------------------------------------------------ news and company data
+  function notesCard(d) {
+    var n = arr(d.notes);
+    if (!n.length) return "";
+    return '<section class="card"><h3>Worth knowing</h3><ul class="plain">' +
+      n.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") +
+      '</ul><p class="note">Context only: the forecasts do not use news or company data.</p></section>';
+  }
+
+  var TONE = { "darker than usual": "warn", "brighter than usual": "good", "normal": "" };
+  function newsCard(d) {
+    var n = d.news;
+    if (!n) return "";
+    var ar = n.archive || {};
+    var arch = ar.n ? '<p class="s">' + esc(ar.n) + ' headlines archived since ' + esc(ar.since) + '.</p>' : "";
+    if (!n.available) {
+      return '<section class="card"><h3>News tone</h3><p class="note">The news source (GDELT) did not give a usable answer this week, so there is no tone reading. The next run will try again.</p>' + arch + '</section>';
+    }
+    var rows = arr(n.series).map(function (x) {
+      var label = x.label ? '<span class="pill ' + (TONE[x.label] || "") + '">' + esc(x.label) + '</span>' : '<span class="pill">building history</span>';
+      var heavy = x.heavy ? ' <span class="pill info">heavy coverage</span>' : "";
+      return '<div class="newsrow"><div class="row"><span>' + esc(x.name) + heavy + '</span><span>' + label + '</span></div>' +
+        spark(x.spark, { cls: "mini", label: "News tone for " + x.name + ", last 60 days" }) + '</div>';
+    }).join("");
+    return '<section class="card"><h3>News tone</h3><p class="note" style="margin-top:2px">The average tone of English-language news coverage (GDELT) over the last 7 days, compared with its own past year. Charts show the last 60 days. "Darker" describes the news, not a forecast.</p>' +
+      '<div style="margin-top:6px">' + rows + '</div>' +
+      '<p class="s" style="margin-top:8px">' + esc(n.days) + ' days of history since ' + esc(n.first) + '.</p>' + arch + '</section>';
+  }
+
   function tabOverview(d) {
     var alerts = arr(d.alerts);
     var al = alerts.length
@@ -282,7 +317,7 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
         alerts.map(function (a) { return "<li>" + esc(a.text) + "</li>"; }).join("") + '</ul></div>'
       : '<div class="banner info">No alerts this week.</div>';
     return '<section class="card"><div class="k">This week</div><p class="headline">' + esc(d.headline) + '</p></section>' +
-      al + changesCard(d) + glance(d) + outlookCard(d) + headlinesCard(d);
+      al + notesCard(d) + changesCard(d) + glance(d) + newsCard(d) + outlookCard(d) + headlinesCard(d);
   }
 
   // ------------------------------------------------------------------ markets
@@ -338,6 +373,57 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
   }
 
   // ------------------------------------------------------------------ stocks
+  function fundLine(s) {
+    var f = s.fund;
+    if (!f) return "";
+    var soon = f.earnings_soon
+      ? '<div style="margin-top:4px"><span class="chip" style="background:var(--warn-bg);color:var(--warn)">earnings in ' + esc(f.earnings_days) + 'd</span></div>' : "";
+    var rows = "";
+    if (isNum(f.score)) {
+      rows += kv("Company-data rank (0-100)", num(f.score, 0)) +
+        kv("Value / quality / growth", num(f.value, 0) + " / " + num(f.quality, 0) + " / " + num(f.growth, 0));
+    }
+    if (isNum(f.pe)) rows += kv("P/E (last year)", num(f.pe, 1));
+    if (isNum(f.fwd_pe)) rows += kv("P/E (expected)", num(f.fwd_pe, 1));
+    if (isNum(f.roe_pct)) rows += kv("Return on equity", num(f.roe_pct, 0) + "%");
+    if (isNum(f.margin_pct)) rows += kv("Operating margin", num(f.margin_pct, 0) + "%");
+    if (isNum(f.rev_growth_pct)) rows += kv("Revenue growth", signed(f.rev_growth_pct, 0));
+    if (isNum(f.debt_eq)) rows += kv("Debt / equity", num(f.debt_eq, 0) + "%");
+    if (f.sector) rows += kv("Sector", esc(f.sector));
+    if (f.next_earnings) rows += kv("Next earnings", esc(f.next_earnings) + (isNum(f.earnings_days) ? " (in " + esc(f.earnings_days) + "d)" : ""));
+    if (!rows) return soon;
+    return soon + '<details><summary>Company data</summary>' + rows +
+      '<div class="s">Ranked against the other tracked stocks, not sector-adjusted. Context only.</div></details>';
+  }
+
+  function newsLine(s) {
+    var n = s.news;
+    if (!n) return "";
+    var hl = arr(n.headlines).map(function (h) {
+      var u = safeUrl(h.url);
+      var t = u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' + esc(h.title) + '</a>' : esc(h.title);
+      return '<div class="news">' + t + '<div class="s">' + esc(h.domain) + '</div></div>';
+    }).join("");
+    var tone = n.label ? "News tone " + n.label + (isNum(n.tone_7) ? " (" + num(n.tone_7, 1) + ")" : "") : "News tone: not enough data yet";
+    return '<details><summary>News check</summary><div class="s">' + esc(tone) + '</div>' +
+      (hl || '<div class="s">No recent headlines found.</div>') + '</details>';
+  }
+
+  function fundCard(d) {
+    var f = d.fundamentals;
+    if (!f) return "";
+    if (!f.available) return '<section class="card"><h3>Company data</h3><p class="note">' + esc(f.reason || "Not available this week.") + '</p></section>';
+    var soon = arr(d.stocks).filter(function (s) { return s.fund && s.fund.earnings_soon; })
+      .map(function (s) { return esc(s.ticker) + " (" + esc(s.fund.earnings_days) + "d)"; });
+    return '<section class="card"><h3>Company data</h3>' +
+      '<p class="note" style="margin-top:2px">A weekly snapshot from Yahoo Finance: valuation, quality and growth, ranked against the other ' + esc(f.universe) +
+      ' tracked stocks (not adjusted for sector). Shown for context. The ranker does not use it; the Trust tab tests whether it would have helped.</p>' +
+      kv("Snapshot", esc(f.as_of) + (f.fresh ? "" : " (older than this run)")) +
+      kv("Stocks covered", esc(f.n) + " of " + esc(f.universe)) +
+      kv("Weeks saved", esc(f.weeks_saved)) +
+      (soon.length ? kv("Reporting earnings soon", soon.join(", ")) : "") + '</section>';
+  }
+
   function tabStocks(d) {
     var sm = d.stock_model || {}, sh = sm.health, p = d.portfolio || {}, c = d.changes || {};
     var isNew = {}; arr(c.entered).forEach(function (t) { isNew[t] = true; });
@@ -355,7 +441,7 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
       return '<div class="stock' + (inPort ? " sel" : "") + '">' +
         '<div class="rank">' + (i + 1) + '</div>' +
         '<div><span class="tick">' + esc(s.ticker) + '</span>' + nw + flag +
-          '<div class="s">beat-average odds ' + pct(s.p, 1) + ' | score ' + pct(s.p_raw, 1) + ' | 20d ' + signed(s.ret_20 * 100) + ' | vs market ' + signed(s.rs_20 * 100) + ' | vol ' + pct(s.vol_ann) + '</div></div>' +
+          '<div class="s">beat-average odds ' + pct(s.p, 1) + ' | score ' + pct(s.p_raw, 1) + ' | 20d ' + signed(s.ret_20 * 100) + ' | vs market ' + signed(s.rs_20 * 100) + ' | vol ' + pct(s.vol_ann) + '</div>' + fundLine(s) + newsLine(s) + '</div>' +
         '<div class="right">' + w + '</div></div>';
     }).join("");
     var delay = (d.horizons || {}).entry_delay;
@@ -364,7 +450,7 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
       (delay ? ", assuming you buy " + esc(delay) + " trading day" + (delay > 1 ? "s" : "") + " after the signal date" : "") +
       '. Odds are pulled toward the ' + pct(sm.base, 1) + ' base rate (the model keeps ' + pct(sm.lam) + ' of its signal). The ranking itself uses the raw score.</p></section>' +
       '<section class="card"><div class="s" style="margin-bottom:6px">Highlighted rows form the illustrative top-' + esc(p.top_k) + ' portfolio: invested ' + pct(p.invested) +
-      ', cash ' + pct(p.cash) + (isNum(p.turnover) ? '; turnover vs last run ' + pct(p.turnover) : "") + '.</div>' + rows + '</section>';
+      ', cash ' + pct(p.cash) + (isNum(p.turnover) ? '; turnover vs last run ' + pct(p.turnover) : "") + '.</div>' + rows + '</section>' + fundCard(d);
   }
 
   // ------------------------------------------------------------------ trust
@@ -489,6 +575,52 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
     return out + '</section>';
   }
 
+  var VERDICT = { "helps": "good" };
+  function trustNews(d) {
+    var n = d.news;
+    if (!n) return '<section class="card"><h3>Would news help the models?</h3><p class="note">Not available yet.</p></section>';
+    var e = n.experiment;
+    var out = '<section class="card"><h3>Would news help the models?</h3>';
+    if (!e || !e.available) {
+      return out + '<p class="note">Not testable yet. ' + esc((e && e.reason) || "") + ' Until it passes, the forecasts ignore news.</p></section>';
+    }
+    out += '<div style="margin:6px 0"><span class="pill ' + (e.verdict === "promising" ? "good" : "") + '">' + esc(e.verdict) + '</span></div>' +
+      '<p class="note" style="margin-top:2px">Each market model was tested year by year with and without news features, on identical rows (' + esc(e.first) + ' to ' + esc(e.last) +
+      '). To avoid being fooled by luck, every result was also compared with ' + esc(e.placebos) + ' stand-ins: the same news moved to unrelated dates. News only counts as helping if it beats all of them. It helped in ' +
+      esc(e.helps) + ' of ' + esc(e.comparisons) + ' comparisons; up to ' + num(e.expected_by_chance, 1) + ' could happen by luck alone. The forecasts do not use news either way.</p>' +
+      (arr(e.skipped).length ? '<p class="note">Skipped for time this run: ' + esc(arr(e.skipped).join(", ")) + '.</p>' : "");
+    arr(e.markets).forEach(function (m) {
+      var h = m.heads || {};
+      function row(label, x, digits) {
+        if (!x) return "";
+        var ref = isNum(x.null_lo) && isNum(x.null_hi) && isNum(x.diff)
+          ? '<div class="s">Gain from real news ' + sgn(x.diff, digits) + ' (positive is better). Stand-in news: ' + sgn(x.null_lo, digits) + ' to ' + sgn(x.null_hi, digits) + '.</div>' : "";
+        return kv(label, num(x.a, 3) + " to " + num(x.b, 3) + ' <span class="pill ' + (VERDICT[x.verdict] || "") + '">' + esc(x.verdict) + '</span>') + ref;
+      }
+      out += '<details><summary>' + esc(m.name) + '</summary>' + row("Direction, AUC (higher is better)", h.up, 3) +
+        row("Crash risk, AUC (higher is better)", h.crash, 3) + row("Volatility error (lower is better)", h.vol, 3) + '</details>';
+    });
+    return out + '</section>';
+  }
+
+  function trustFund(d) {
+    var f = d.fundamentals;
+    if (!f) return '<section class="card"><h3>Would company data have helped?</h3><p class="note">Not available yet.</p></section>';
+    var sc = f.scorecard;
+    var out = '<section class="card"><h3>Would company data have helped?</h3>';
+    if (!sc) return out + '<p class="note">' + esc(f.reason || "Not available yet.") + '</p></section>';
+    out += '<div style="margin:6px 0"><span class="pill ' + ({ "positive so far": "good", "negative so far": "bad" }[sc.verdict] || "") + '">' + esc(sc.verdict) + '</span></div>' +
+      '<p class="note" style="margin-top:2px">Each weekly snapshot is scored once ' + esc(sc.horizon_days) + ' trading days have passed: did higher-scoring stocks go on to beat lower-scoring ones? Snapshots overlap, so ' +
+      esc(sc.weeks) + ' scored weeks count for about ' + num(sc.effective_periods, 1) + ' independent periods. No verdict is drawn before ' + esc(sc.min_weeks) + ' weeks.</p>';
+    if (sc.weeks > 0) {
+      out += kv("Weeks scored", esc(sc.weeks) + (sc.pending ? " (" + esc(sc.pending) + " too recent to score)" : "")) +
+        kv("Average rank correlation (0 = no link)", num(sc.mean_ic, 3)) +
+        kv("Weeks with a positive link", pct(sc.hit_rate)) +
+        kv("Top third minus bottom third, per period", signed(sc.spread_pct, 2));
+    }
+    return out + '</section>';
+  }
+
   function tabTrust(d) {
     var hl = (d.health || {}).updated;
     return '<section class="card"><h3>How much should you trust this?</h3>' +
@@ -497,10 +629,13 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
       '<h2>Markets: historical test</h2>' + trustMarkets(d) +
       '<h2>Stocks: historical test</h2>' + trustStocks(d) +
       '<h2>Live scorecard</h2>' + scorecard(d) +
+      '<h2>News and company data</h2>' + trustNews(d) + trustFund(d) +
       '<h2>Known limits</h2><section class="card"><ul class="plain">' +
       '<li>Index trades are assumed to happen at the close the signal was computed on.</li>' +
       '<li>The stock list is today\'s large companies, so history is flattered by survivorship bias.</li>' +
       '<li>Cash earns nothing, and there are no taxes, spreads or market impact beyond the flat cost.</li>' +
+      '<li>News tone and company ratios are context. The model does not use them unless a test on this tab shows they help.</li>' +
+      '<li>Company ratios are today\'s snapshots, ranked within a short list of large stocks and not adjusted for sector.</li>' +
       '<li>Past results, however carefully tested, do not predict future returns.</li></ul></section>';
   }
 
