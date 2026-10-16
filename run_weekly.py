@@ -10,6 +10,8 @@ dashboard reads. Research tool only, not financial advice.
     python run_weekly.py --refresh-health   also force the monthly walk-forward check now
     python run_weekly.py --no-outlook       skip the optional AI commentary
     python run_weekly.py --no-headlines     skip the free news headlines
+    python run_weekly.py --no-news          skip the news archive and tone series
+    python run_weekly.py --no-fundamentals  skip the company-data snapshot
 """
 import argparse
 import os
@@ -19,11 +21,22 @@ from pathlib import Path
 import pandas as pd
 
 from marketlab import config as C
-from marketlab import data, features, forecast, headlines, health as health_mod, outlook, report, scoring, util
+from marketlab import (data, features, forecast, fundamentals, headlines, health as health_mod, news, opts,
+                       outlook, report, scoring, util)
+
+
+def _soft(name, fn, log):
+    """Run an optional step. Whatever goes wrong, the weekly run carries on without it."""
+    try:
+        return fn()
+    except Exception as e:
+        log(f"{name} skipped ({type(e).__name__}: {e})")
+        return None
 
 
 def run(root, downloader=None, now=None, force_health=False, use_outlook=True, demo=False,
-        sleep=5.0, log=print, outlook_client=None, api_key=None, use_headlines=True, headlines_fetcher=None):
+        sleep=5.0, log=print, outlook_client=None, api_key=None, use_headlines=True, headlines_fetcher=None,
+        use_news=True, news_fetcher=None, use_fundamentals=True, fund_fetcher=None):
     """One weekly run. Returns the payload that was written. Raises (and saves nothing) if the data or the
     forecasts fail their checks."""
     root = Path(root)
@@ -65,13 +78,28 @@ def run(root, downloader=None, now=None, force_health=False, use_outlook=True, d
     slog = scoring.append_log(log_dir / "log_stocks.csv", snew, ["run_date", "ticker"])
     scorecard = scoring.build_scorecard(mlog, slog, ds)
 
-    # 6. free headlines (context only), then the payload without the optional commentary, validated
-    hl = headlines.fetch(fetcher=headlines_fetcher, now=now, log=log) if (use_headlines and not demo) else []
+    # 6. context only (none of it can change a forecast): headlines, the news archive, company data
+    live = not demo
+    hl_fetch = headlines.memoize(headlines_fetcher)
+    hl = headlines.fetch(fetcher=hl_fetch, now=now, log=log) if (use_headlines and live) else []
+    hl_all = headlines.fetch_all(fetcher=hl_fetch, now=now, log=log) if (use_headlines and live) else []
+    picks = ranking.loc[ranking["base_w"] > 0, "ticker"].tolist()
+    news_block = None
+    if use_news and live and opts.get("NEWS_ENABLED"):
+        news_block = _soft("News", lambda: news.update(log_dir, now, picks, frames, headline_items=hl_all,
+                                                       fetcher=news_fetcher, sleep=sleep, force_experiment=force_health,
+                                                       log=log), log)
+    fund_block = None
+    if use_fundamentals and live and opts.get("FUND_ENABLED"):
+        fund_block = _soft("Company data", lambda: fundamentals.update(log_dir, ds, now, fetcher=fund_fetcher,
+                                                                       pause=0 if sleep == 0 else None, log=log), log)
+
+    # 7. the payload without the optional commentary, validated
     payload = report.build_payload(ds, mdash, ranking, stock_meta, h, scorecard, mlog, slog, ds.run_date, demo=demo,
-                                   headlines=hl)
+                                   headlines=hl, news=news_block, fundamentals=fund_block)
     report.validate_payload(util.clean(payload))
 
-    # 7. optional AI commentary: never affects a forecast
+    # 8. optional AI commentary: never affects a forecast
     if use_outlook and not demo and (outlook_client is not None or api_key or os.environ.get("ANTHROPIC_API_KEY")):
         picks = [s["ticker"] for s in payload["stocks"] if s["base_w"] > 0]
         text = outlook.generate(report.plain_text(payload), outlook.fetch_headlines(["^GSPC"] + picks) if outlook_client is None else {},
@@ -80,7 +108,7 @@ def run(root, downloader=None, now=None, force_health=False, use_outlook=True, d
             payload["outlook"] = {"text": text, "model": C.OUTLOOK_MODEL,
                                   "generated_utc": payload["generated_utc"]}
 
-    # 8. write (atomically) only now that everything has passed
+    # 9. write (atomically) only now that everything has passed
     util.write_json_atomic(web_path, payload)
     log(f"Wrote {web_path}")
     if not demo:
@@ -95,10 +123,12 @@ def main(argv=None):
     ap.add_argument("--refresh-health", action="store_true", help="force the walk-forward health check now")
     ap.add_argument("--no-outlook", action="store_true", help="skip the optional AI commentary")
     ap.add_argument("--no-headlines", action="store_true", help="skip the free news headlines")
+    ap.add_argument("--no-news", action="store_true", help="skip the news archive and tone series")
+    ap.add_argument("--no-fundamentals", action="store_true", help="skip the company-data snapshot")
     args = ap.parse_args(argv)
     try:
         run(Path(__file__).resolve().parent, force_health=args.refresh_health, use_outlook=not args.no_outlook,
-            use_headlines=not args.no_headlines)
+            use_headlines=not args.no_headlines, use_news=not args.no_news, use_fundamentals=not args.no_fundamentals)
     except data.DataError as e:
         print(f"STOPPED: {e}", file=sys.stderr)
         return 2
