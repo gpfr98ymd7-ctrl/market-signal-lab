@@ -1,6 +1,6 @@
 // Network-first service worker: always tries for fresh data, falls back to the
 // last cached copy so the app still opens offline.
-const CACHE = "market-lab-v2";
+const CACHE = "market-lab-v3";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
