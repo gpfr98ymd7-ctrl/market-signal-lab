@@ -222,7 +222,7 @@ def test_pipeline_two_weeks_logs_scores_and_dedupes(tmp_path):
         def go(end):
             return run_weekly.run(tmp_path, downloader=synthetic.make_downloader(end=end),
                                   now=pd.Timestamp(end) + pd.Timedelta(days=1, hours=7), sleep=0, log=silent,
-                                  use_outlook=False, use_headlines=False)
+                                  use_outlook=False, use_headlines=False, use_news=False, use_fundamentals=False)
 
         p1 = go("2026-08-28")
         assert p1["changes"]["previous_run"] is None and p1["scorecard"]["markets"]["scored"] == 0
