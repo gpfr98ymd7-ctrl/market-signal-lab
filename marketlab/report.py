@@ -149,9 +149,32 @@ def headline(mdash, ranking, hviews):
     return " ".join(parts)
 
 
+# ---------------------------------------------------------------- context notes (news and company data)
+def build_notes(stocks, news, fund):
+    """A few plain, neutral notes drawn from the news and company-data blocks. Context only, never alerts."""
+    notes = []
+    picks = [s for s in stocks if s.get("base_w", 0) > 0]
+    soon = [(s["ticker"], (s.get("fund") or {}).get("earnings_days")) for s in picks
+            if (s.get("fund") or {}).get("earnings_soon")]
+    if soon:
+        notes.append("Earnings due soon for top picks: " + ", ".join(f"{t} (in {d}d)" for t, d in soon) +
+                     ". Results can move a stock sharply, and the model does not know about them.")
+    series = (news or {}).get("series") or []
+    dark = [x["name"] for x in series if x.get("label") == "darker than usual"]
+    if dark:
+        notes.append("News tone is darker than usual for: " + ", ".join(dark) + ".")
+    heavy = [x["name"] for x in series if x.get("heavy")]
+    if heavy:
+        notes.append("Unusually heavy news coverage for: " + ", ".join(heavy) + ".")
+    fell = [s["ticker"] for s in picks if ((s.get("news") or {}).get("label") == "lower than last week")]
+    if fell:
+        notes.append("News tone for " + ", ".join(fell) + " is lower than last week.")
+    return notes[:4]
+
+
 # ---------------------------------------------------------------- payload
 def build_payload(ds, mdash, ranking, stock_meta, health, scorecard, mlog, slog, run_date, outlook=None, demo=False,
-                  headlines=None):
+                  headlines=None, news=None, fundamentals=None):
     mh = (health or {}).get("markets") or {}
     hviews = {m: health_view(mh.get(m)) for m in mdash["key"]}
     changes = changes_since_last(mdash, ranking, mlog, slog, run_date)
@@ -174,6 +197,15 @@ def build_payload(ds, mdash, ranking, stock_meta, health, scorecard, mlog, slog,
                "region": r["region"], "ret_20": r["ret_20"], "rs_20": r["rs_20"], "vol_ann": r["vol_ann"],
                "mkt_mult": r["mkt_mult"], "base_w": r["base_w"], "final_w": r["final_w"]}
               for _, r in ranking.iterrows()]
+    fund = dict(fundamentals) if fundamentals else None
+    by_ticker = (fund or {}).pop("by_ticker", {}) or {}
+    news_out = dict(news) if news else None
+    news_by = {p["ticker"]: p for p in ((news_out or {}).pop("picks", []) or [])}
+    for s in stocks:
+        if s["ticker"] in by_ticker:
+            s["fund"] = by_ticker[s["ticker"]]
+        if s["ticker"] in news_by:
+            s["news"] = news_by[s["ticker"]]
     invested = float(ranking["final_w"].sum())
 
     payload = {
@@ -195,6 +227,9 @@ def build_payload(ds, mdash, ranking, stock_meta, health, scorecard, mlog, slog,
         "health": {"updated": (health or {}).get("updated"), "available": bool(health and health.get("markets"))},
         "outlook": outlook,
         "headlines": list(headlines or []),
+        "news": news_out,
+        "fundamentals": fund,
+        "notes": build_notes(stocks, news_out, fund),
     }
     return payload
 
@@ -214,6 +249,8 @@ def plain_text(payload):
     sh = (payload.get("stock_model") or {}).get("health")
     if sh:
         lines.append(f"Stock ranker historic skill: {sh['label']} (AUC {sh['auc']:.3f})")
+    for n in payload.get("notes") or []:
+        lines.append("Context: " + n)
     return "\n".join(lines)
 
 
