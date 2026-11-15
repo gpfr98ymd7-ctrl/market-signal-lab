@@ -20,7 +20,7 @@ def health_view(h):
     ac = h.get("auc_crash")
     crash = "none" if ac is None or ac < 0.55 else ("modest" if ac < 0.65 else "useful")
     keep = ("auc_up", "lam_up", "auc_crash", "lam_crash", "vol_improve_pct", "k_range", "cov90_raw", "cov90_cal",
-            "cov50_raw", "cov50_cal", "first_test", "last_test", "n_days", "honest", "overlay")
+            "cov50_raw", "cov50_cal", "first_test", "last_test", "n_days", "honest", "overlay", "features")
     return {"available": True, "direction": direction, "vol": vol, "crash": crash, **{k: h.get(k) for k in keep}}
 
 
@@ -29,8 +29,20 @@ def stock_health_view(h):
         return None
     auc, lam = h.get("auc"), h.get("lam") or 0.0
     label = "none" if (auc is None or auc < 0.52 or lam < 0.1) else ("weak" if auc < 0.54 else "some")
-    keep = ("auc", "years_above_half", "n_years", "spread_pct", "spread_t", "lam", "first_test", "last_test", "backtest")
+    keep = ("auc", "years_above_half", "n_years", "spread_pct", "spread_t", "lam", "first_test", "last_test", "backtest",
+            "features")
     return {"label": label, **{k: h.get(k) for k in keep}}
+
+
+def macro_test_view(h, mdash):
+    """Whether the extra global-driver inputs were tested, and what the test decided, in plain fields."""
+    mt = (h or {}).get("macro_test")
+    if not mt:
+        return None
+    names = dict(zip(mdash["key"], mdash["market"])) if mdash is not None and len(mdash) else {}
+    return {"ran": bool(mt.get("ran")), "out_of_time": bool(mt.get("out_of_time")), "updated": (h or {}).get("updated"),
+            "seconds": mt.get("seconds"), "stocks": mt.get("stocks"),
+            "markets": [{"key": k, "name": names.get(k, k), **v} for k, v in (mt.get("markets") or {}).items()]}
 
 
 # ---------------------------------------------------------------- checks before anything is saved
@@ -174,7 +186,7 @@ def build_notes(stocks, news, fund):
 
 # ---------------------------------------------------------------- payload
 def build_payload(ds, mdash, ranking, stock_meta, health, scorecard, mlog, slog, run_date, outlook=None, demo=False,
-                  headlines=None, news=None, fundamentals=None):
+                  headlines=None, news=None, fundamentals=None, paper=None, watchlist=None, growth=None, drivers=None):
     mh = (health or {}).get("markets") or {}
     hviews = {m: health_view(mh.get(m)) for m in mdash["key"]}
     changes = changes_since_last(mdash, ranking, mlog, slog, run_date)
@@ -189,7 +201,7 @@ def build_payload(ds, mdash, ranking, stock_meta, health, scorecard, mlog, slog,
             "pred_vol": r["pred_vol"], "vol_now": r["vol_now"],
             "range_pct": {k: 100 * (np.exp(r[q]) - 1) for k, q in
                           (("p5", "q05"), ("p25", "q25"), ("p50", "q50"), ("p75", "q75"), ("p95", "q95"))},
-            "exposure": r["exposure"], "crash_mult": r["crash_mult"], "vol_mult": r["vol_mult"],
+            "exposure": r["exposure"], "inputs": r.get("inputs", "base"), "crash_mult": r["crash_mult"], "vol_mult": r["vol_mult"],
             "regime_cap": r["regime_cap"], "health": hviews[r["key"]], "history": market_history(mlog, r["key"]),
             "px_hist": [round(float(x), 4) for x in ds.idx[r["key"]].dropna().tail(126)],
         })
@@ -206,6 +218,11 @@ def build_payload(ds, mdash, ranking, stock_meta, health, scorecard, mlog, slog,
             s["fund"] = by_ticker[s["ticker"]]
         if s["ticker"] in news_by:
             s["news"] = news_by[s["ticker"]]
+    growth_out = dict(growth) if growth else None
+    for p in (growth_out or {}).get("picks", []) or []:                       # news tone label for each growth pick
+        n = news_by.get(p["ticker"]) or {}
+        if n.get("label"):
+            p["news"] = n["label"]
     invested = float(ranking["final_w"].sum())
 
     payload = {
@@ -219,7 +236,7 @@ def build_payload(ds, mdash, ranking, stock_meta, health, scorecard, mlog, slog,
         "changes": changes,
         "markets": markets,
         "stocks": stocks,
-        "stock_model": {"base": stock_meta["base"], "lam": stock_meta["lam"],
+        "stock_model": {"base": stock_meta["base"], "lam": stock_meta["lam"], "inputs": stock_meta.get("inputs", "base"),
                         "health": stock_health_view((health or {}).get("stocks"))},
         "portfolio": {"top_k": C.TOP_K, "invested": invested, "cash": 1 - invested,
                       "turnover": changes["turnover"], "est_cost_pct": changes["est_cost_pct"], "cost_bps": C.COST_BPS},
@@ -230,6 +247,12 @@ def build_payload(ds, mdash, ranking, stock_meta, health, scorecard, mlog, slog,
         "news": news_out,
         "fundamentals": fund,
         "notes": build_notes(stocks, news_out, fund),
+        "growth": growth_out,
+        "paper": paper,
+        "watchlist": watchlist,
+        "global": ({**drivers, "test": macro_test_view(health, mdash)} if drivers else
+                   ({"available": False, "rows": [], "notes": [], "test": macro_test_view(health, mdash)}
+                    if macro_test_view(health, mdash) else None)),
     }
     return payload
 
@@ -249,6 +272,10 @@ def plain_text(payload):
     sh = (payload.get("stock_model") or {}).get("health")
     if sh:
         lines.append(f"Stock ranker historic skill: {sh['label']} (AUC {sh['auc']:.3f})")
+    g = payload.get("growth") or {}
+    if g.get("available"):
+        lines.append(f"Growth watch, top {g['n']} by upside potential over {g['horizon']} (a risk list, not advice; model "
+                     "odds are weak): " + ", ".join(f"{p['ticker']} {p['w']:.0%}" for p in g["picks"][:10]))
     for n in payload.get("notes") or []:
         lines.append("Context: " + n)
     return "\n".join(lines)
@@ -259,6 +286,10 @@ def notification(payload):
     alerts = payload["alerts"]
     title = "Market Lab: " + (f"{len(alerts)} alert(s)" if alerts else "weekly run")
     body = payload["headline"]
+    g = payload.get("growth") or {}
+    if g.get("available"):
+        body += (f" Growth watch top {g['n']} (paper portfolio): " + ", ".join(p["ticker"] for p in g["picks"][:8]) +
+                 ("..." if g["n"] > 8 else ".") + " A risk list, not advice.")
     if alerts:
         body += "\n\n" + "\n".join("- " + a["text"] for a in alerts[:4])
     if payload["data_warnings"]:
