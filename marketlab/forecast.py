@@ -3,7 +3,14 @@ import numpy as np
 import pandas as pd
 
 from . import config as C
-from . import models
+from . import macro, models, universe
+
+
+def _inputs(F, health_entry):
+    """The feature list to use: the extra global-driver inputs only when the monthly test showed they help."""
+    if health_entry and health_entry.get("features") == "macro":
+        return F
+    return macro.base_features(F)
 
 
 def forecast_markets(ds, frames, health):
@@ -11,12 +18,13 @@ def forecast_markets(ds, frames, health):
     market_health = (health or {}).get("markets") or {}
     rows = []
     for m, (f, d, F) in frames.items():
+        h = market_health.get(m)
+        F = _inputs(F, h)
         mods = models.fit_heads(d, F)
         last = f.sort_values("date").iloc[[-1]]
         pr = models.predict_heads(mods, last[F]).iloc[0]
         base_up, base_crash = float(d["y_up"].mean()), float(d["y_crash"].mean())
 
-        h = market_health.get(m)
         lam_up = h["lam_up"] if h else C.DEFAULT_LAM
         lam_cr = h["lam_crash"] if h else C.DEFAULT_LAM
         bias = h["vol_bias"] if h else 0.0
@@ -41,6 +49,7 @@ def forecast_markets(ds, frames, health):
             **q, "crash_mult": crash_mult, "vol_mult": vol_mult, "regime_cap": reg_cap,
             "exposure": exposure,
             "lam_up": lam_up, "lam_crash": lam_cr, "k_range": k,
+            "inputs": "macro" if F is not None and any(macro.is_extra(c) for c in F) else "base",
         })
     return pd.DataFrame(rows)
 
@@ -58,6 +67,7 @@ def _flag(r):
 def forecast_stocks(ds, panel, mdash, health):
     """Rank stocks by the model's odds of beating the universe average, then size an illustrative portfolio."""
     sfull, sdata, SF = panel
+    SF = _inputs(SF, (health or {}).get("stocks"))
     model = models.fit_stock_model(sdata[SF], sdata["up"])
 
     latest = sfull.sort_values("date").groupby("ticker").tail(1)
@@ -71,7 +81,7 @@ def forecast_stocks(ds, panel, mdash, health):
     latest["vol_ann"] = latest["vol_20"] * np.sqrt(252)
     latest["flag"] = latest.apply(_flag, axis=1)
 
-    latest["region"] = [C.region_of(t) for t in latest["ticker"]]
+    latest["region"] = [universe.region_of(t) for t in latest["ticker"]]
     mult = dict(zip(mdash["key"], mdash["exposure"]))
     latest["mkt_mult"] = latest["region"].map(mult).fillna(1.0)
 
@@ -83,4 +93,4 @@ def forecast_stocks(ds, panel, mdash, health):
     latest["px"] = [float(ds.close[t].dropna().loc[d]) for t, d in zip(latest["ticker"], latest["date"])]
 
     ranking = latest.sort_values("p_raw", ascending=False).reset_index(drop=True)
-    return ranking, {"base": base, "lam": lam}
+    return ranking, {"base": base, "lam": lam, "inputs": "macro" if any(macro.is_extra(c) for c in SF) else "base"}
