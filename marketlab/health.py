@@ -9,12 +9,16 @@ Those honest forecasts are then used to:
 On data with no real signal the shrinkage factor goes to about zero, so the dashboard quotes base rates
 instead of confident-looking noise.
 """
+import time
+
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
 from . import config as C
-from . import backtest, models, util
+from . import backtest, macro, models, opts, util
+
+FORMAT = 2        # bump to force a recompute of the saved health file (it is independent of config.py on purpose)
 
 
 def _auc(y, p):
@@ -163,29 +167,132 @@ def stock_health(sdata, S_FEATURES):
     }
 
 
-def compute(frames, panel, run_date, log=print):
-    health = {"version": C.HEALTH_VERSION, "updated": pd.Timestamp(run_date).strftime("%Y-%m-%d"),
-              "markets": {}, "stocks": None}
+# ---------------------------------------------------------------- do the extra global-driver inputs help?
+def decide_stocks(base, ext):
+    """Use the stock ranker with the extra inputs only if it did clearly better in most test years, and overall.
+    `base` and `ext` are stock_health results for the two feature sets. Returns a small, plain record."""
+    need_gain, need_share = opts.get("MACRO_MIN_AUC_GAIN"), opts.get("MACRO_MIN_YEARS_WON")
+    rec = {"use": False, "auc_base": base.get("auc"), "auc_macro": ext.get("auc"),
+           "spread_base": base.get("spread_pct"), "spread_macro": ext.get("spread_pct"),
+           "need_gain": need_gain, "need_share": need_share}
+    yb, ye = base.get("auc_by_year") or {}, ext.get("auc_by_year") or {}
+    years = sorted(set(yb) & set(ye))
+    rec["years"] = len(years)
+    if len(years) < 5:
+        rec["reason"] = "Too few test years to tell."
+        return rec
+    d = np.array([ye[y] - yb[y] for y in years])
+    rec.update({"gain": float(d.mean()), "years_won": int((d > 0).sum())})
+    ok_pooled = (ext.get("auc") or 0) > (base.get("auc") or 0)
+    if d.mean() >= need_gain and (d > 0).mean() >= need_share and ok_pooled:
+        rec["use"] = True
+        rec["reason"] = "Clearly better in most test years."
+    else:
+        rec["reason"] = "No clear gain, so the original inputs are kept."
+    return rec
+
+
+def _gap(a, b, margin):
+    """+1 if b beats a by more than `margin`, -1 if it is worse by more than `margin`, else 0 (None counts as a tie)."""
+    if a is None or b is None:
+        return 0
+    d = b - a
+    return 1 if d > margin else (-1 if d < -margin else 0)
+
+
+def decide_market(base, ext):
+    """Use a market's forecasts with the extra inputs only if they won on at least two of the three yardsticks
+    (direction, crash, volatility) by a clear margin and lost on none."""
+    g = {"up": _gap(base.get("auc_up"), ext.get("auc_up"), 0.005),
+         "crash": _gap(base.get("auc_crash"), ext.get("auc_crash"), 0.005),
+         "vol": _gap(base.get("vol_improve_pct"), ext.get("vol_improve_pct"), 0.5)}
+    wins, losses = sum(v > 0 for v in g.values()), sum(v < 0 for v in g.values())
+    use = wins >= 2 and losses == 0
+    return {"use": use, "wins": wins, "losses": losses,
+            "auc_up": [base.get("auc_up"), ext.get("auc_up")], "auc_crash": [base.get("auc_crash"), ext.get("auc_crash")],
+            "vol_improve_pct": [base.get("vol_improve_pct"), ext.get("vol_improve_pct")],
+            "reason": "Clearly better on at least two of three yardsticks." if use else "No clear gain, so the original inputs are kept."}
+
+
+def compute(frames, panel, run_date, log=print, budget=None):
+    """The full walk-forward health check. When the extra global-driver inputs are present, every model is checked
+    twice (with and without them), the better setup is the one calibrated and used, and the comparison is recorded.
+    `budget` (seconds) caps the extra work: when it would be exceeded the original inputs are used."""
+    budget = opts.get("MACRO_TEST_BUDGET") if budget is None else budget
+    health = {"format": FORMAT, "version": C.HEALTH_VERSION, "updated": pd.Timestamp(run_date).strftime("%Y-%m-%d"),
+              "markets": {}, "stocks": None, "universe": [], "macro_test": {"stocks": None, "markets": {}, "ran": False,
+                                                                           "out_of_time": False}}
+    spent = 0.0
+    mt = health["macro_test"]
+
+    # ---- stocks first: they matter most to the Growth watch
+    _, sdata, SF = panel
+    health["universe"] = sorted(sdata["ticker"].unique().tolist())
+    SF0 = macro.base_features(SF)
+    t = time.time()
+    st = stock_health(sdata, SF0)
+    base_secs = time.time() - t
+    chosen = st
+    if st and len(SF0) < len(SF):
+        if spent + base_secs <= budget:
+            t = time.time()
+            ext = stock_health(sdata, SF)
+            spent += time.time() - t
+            mt["ran"] = True
+            if ext:
+                rec = decide_stocks(st, ext)
+                mt["stocks"] = rec
+                if rec["use"]:
+                    chosen = ext
+                log(f"Global drivers, stock ranker: AUC {st['auc']:.3f} -> {ext['auc']:.3f}; "
+                    f"{'USED' if rec['use'] else 'not used'} ({rec['reason']})")
+        else:
+            mt["out_of_time"] = True
+            log("Global drivers: not enough time to test them on the stock ranker this month.")
+    if chosen:
+        chosen["features"] = "macro" if (chosen is not st) else "base"
+        health["stocks"] = chosen
+        log(f"Health stocks: AUC {chosen['auc']:.3f} | shrink {chosen['lam']:.2f} | inputs: {chosen['features']}")
+
+    # ---- then each market
     for m, (f, d, F) in frames.items():
-        res = market_walk_forward(d, F)
+        F0 = macro.base_features(F)
+        t = time.time()
+        res = market_walk_forward(d, F0)
+        base_secs = time.time() - t
         cal = calibrate_market(res)
+        feats, res_used = "base", res
+        if cal and len(F0) < len(F):
+            if spent + base_secs <= budget:
+                t = time.time()
+                res_e = market_walk_forward(d, F)
+                spent += time.time() - t
+                mt["ran"] = True
+                cal_e = calibrate_market(res_e)
+                if cal_e:
+                    rec = decide_market(cal, cal_e)
+                    mt["markets"][m] = rec
+                    if rec["use"]:
+                        cal, res_used, feats = cal_e, res_e, "macro"
+                    log(f"Global drivers, {C.NAMES[m]}: {'USED' if rec['use'] else 'not used'} "
+                        f"(won {rec['wins']}, lost {rec['losses']} of 3 yardsticks)")
+            else:
+                mt["out_of_time"] = True
         if cal:
-            h = backtest.honest_calibrate(res)
+            h = backtest.honest_calibrate(res_used)
             if len(h) >= 500:
                 cal["honest"] = backtest.honest_metrics(h)
                 cal["overlay"] = backtest.overlay(h)
+            cal["features"] = feats
             health["markets"][m] = cal
             log(f"Health {C.NAMES[m]}: AUC {cal['auc_up']} | shrink up {cal['lam_up']:.2f}, crash {cal['lam_crash']:.2f} "
-                f"| vol {cal['vol_improve_pct']:.0f}% better than naive | range x{cal['k_range']:.2f}")
-    _, sdata, SF = panel
-    health["stocks"] = stock_health(sdata, SF)
-    if health["stocks"]:
-        log(f"Health stocks: AUC {health['stocks']['auc']:.3f} | shrink {health['stocks']['lam']:.2f}")
+                f"| vol {cal['vol_improve_pct']:.0f}% better than naive | range x{cal['k_range']:.2f} | inputs: {feats}")
+    mt["seconds"] = round(spent)
     return health
 
 
 def needs_refresh(h, today, force=False):
-    if force or not h or h.get("version") != C.HEALTH_VERSION or not h.get("markets"):
+    if force or not h or h.get("version") != C.HEALTH_VERSION or h.get("format") != FORMAT or not h.get("markets"):
         return True
     try:
         age = (pd.Timestamp(today) - pd.Timestamp(h["updated"])).days
