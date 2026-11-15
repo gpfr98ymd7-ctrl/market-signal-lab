@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from . import config as C
+from . import opts
 
 
 class DataError(RuntimeError):
@@ -22,6 +23,7 @@ class Dataset:
     stocks: list
     run_date: pd.Timestamp
     warnings: list = field(default_factory=list)
+    extra: pd.DataFrame = None  # optional global-driver closes (rates, currencies, commodities...), forward-filled
 
 
 def yahoo_downloader(tickers, start):
@@ -29,8 +31,16 @@ def yahoo_downloader(tickers, start):
     return yf.download(list(tickers), start=start, auto_adjust=True, progress=False, threads=True)
 
 
-def all_tickers():
-    return list(dict.fromkeys(list(C.STOCKS) + list(C.MARKETS.values()) + list(C.MACRO.values())))
+def extra_map():
+    """Optional global-driver series (key -> Yahoo ticker). Empty when switched off."""
+    return dict(opts.get("MACRO_EXTRA")) if opts.get("MACRO_ENABLED") else {}
+
+
+def all_tickers(also=()):
+    """Everything to download: the stocks, markets, core macro series, the optional global drivers, and any extra
+    tickers asked for (for example shares a paper portfolio still holds after they left the watchlist)."""
+    return list(dict.fromkeys(list(C.STOCKS) + list(also) + list(C.MARKETS.values()) + list(C.MACRO.values()) +
+                              list(extra_map().values())))
 
 
 def _split(raw, tickers):
@@ -127,7 +137,7 @@ def build_dataset(close_all, volume_all, now, log=print):
     keep = []
     for t in C.STOCKS:
         if t not in close_all.columns:
-            warnings.append(f"{t}: no data returned, skipped.")
+            warnings.append(f"{t}: no data returned, skipped. Check the spelling (UK shares end in .L, for example BARC.L).")
             continue
         s = close_all[t].dropna()
         if len(s) < 400:
@@ -151,5 +161,20 @@ def build_dataset(close_all, volume_all, now, log=print):
     inv = {v: k for k, v in C.MARKETS.items()}
     idx = close_all[list(C.MARKETS.values())].rename(columns=inv)
     macro = close_all[list(C.MACRO.values())].rename(columns={v: k for k, v in C.MACRO.items()}).ffill()
+
+    # Optional global drivers: any that are missing or too short are left out, never a reason to stop.
+    extra_cols, lost = {}, []
+    for key, t in extra_map().items():
+        s = close_all[t].dropna() if t in close_all.columns else pd.Series(dtype=float)
+        if len(s) < 800 or (ref_last - s.index.max()).days > 15:
+            lost.append(key)
+            continue
+        extra_cols[key] = close_all[t]
+    extra = pd.DataFrame(extra_cols, index=close_all.index).ffill() if extra_cols else pd.DataFrame(index=close_all.index)
+    if lost:
+        w = ("Global drivers not available this week, so left out: " + ", ".join(lost[:8]) +
+             (" and more" if len(lost) > 8 else "") + ". Everything else ran as normal.")
+        warnings.append(w)
+        log("Data warning: " + w)
     return Dataset(idx=idx, idx_ff=idx.ffill(), macro=macro, close=close_all[keep],
-                   volume=volume_all[keep], stocks=keep, run_date=ref_last, warnings=warnings)
+                   volume=volume_all[keep], stocks=keep, run_date=ref_last, warnings=warnings, extra=extra)
