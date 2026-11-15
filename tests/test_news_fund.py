@@ -6,6 +6,8 @@ from urllib.error import HTTPError
 import numpy as np
 import pandas as pd
 
+from urllib.parse import parse_qs, urlparse
+
 from helpers import RSS, fake_company, fake_gdelt, make_ds, patched, silent
 from marketlab import config as C
 from marketlab import features, fundamentals, news, report, synthetic
@@ -83,8 +85,8 @@ def test_daily_backfill_then_live_window_and_merge(tmp_path):
     path = tmp_path / "news_daily.csv"
     calls = []
     daily, st = news.update_daily(path, NOW, fetcher=fake_gdelt("2026-10-09", calls), sleep=0, log=silent)
-    assert st["ok"] and st["span"] == "96months"
-    assert calls[0]["timespan"] == "96months"
+    assert st["ok"] and st["span"] == "2900d"
+    assert calls[0]["timespan"] == "2900d"
     assert daily.index.max() == pd.Timestamp("2026-10-08")                 # today is incomplete: left out
     assert len(daily) > 2500 and {"global_tone", "global_vol", "spx_tone", "n225_vol"} <= set(daily.columns)
     assert (tmp_path / "news_meta.json").exists()
@@ -92,7 +94,7 @@ def test_daily_backfill_then_live_window_and_merge(tmp_path):
     calls.clear()                                                          # a week later: only the live window
     later = NOW + pd.Timedelta(days=7)
     daily2, st2 = news.update_daily(path, later, fetcher=fake_gdelt("2026-10-16", calls, tone_shift=1.0), sleep=0, log=silent)
-    assert st2["span"] == "3months" and all(c["timespan"] == "3months" for c in calls)
+    assert st2["span"] == "90d" and all(c["timespan"] == "90d" for c in calls)
     assert daily2.index.max() == pd.Timestamp("2026-10-15") and len(daily2) > len(daily)
     old_day, new_day = pd.Timestamp("2025-01-15"), pd.Timestamp("2026-10-01")
     assert daily2.loc[old_day, "global_tone"] == daily.loc[old_day, "global_tone"]          # history is kept
@@ -102,14 +104,39 @@ def test_daily_backfill_then_live_window_and_merge(tmp_path):
 def test_long_window_failure_falls_back_and_is_not_retried_every_run(tmp_path):
     path = tmp_path / "news_daily.csv"
     calls = []
-    long_fails = lambda qs: qs["timespan"] != "3months"
+    long_fails = lambda qs: qs["timespan"] != "90d"
     daily, st = news.update_daily(path, NOW, fetcher=fake_gdelt("2026-10-09", calls, fail=long_fails), sleep=0, log=silent)
-    assert st["ok"] and st["span"] == "3months" and 80 < len(daily) < 100
-    assert [c["timespan"] for c in calls[:5]] == ["96months", "96months", "48months", "48months", "24months"] or \
-        calls[0]["timespan"] == "96months"
+    assert st["ok"] and st["span"] == "90d" and 80 < len(daily) < 100
+    assert calls[0]["timespan"] == "2900d"
     calls.clear()
     news.update_daily(path, NOW + pd.Timedelta(days=7), fetcher=fake_gdelt("2026-10-16", calls), sleep=0, log=silent)
-    assert calls[0]["timespan"] == "3months"                                # not retried within a month
+    assert calls[0]["timespan"] == "90d"                                    # not retried within a month
+
+
+def test_an_unusable_window_is_explained_and_the_next_spelling_is_tried(tmp_path):
+    """If GDELT answers a window with a single row (as happened in the first real run), the run says exactly what it
+    received and tries the same window written another way, instead of giving up with an unexplained message."""
+    inner = fake_gdelt("2026-10-09")
+    seen = []
+
+    def fetch(url):
+        qs = {k: v[0] for k, v in parse_qs(urlparse(url).query).items()}
+        seen.append(qs["timespan"])
+        if qs["mode"] != "artlist" and qs["timespan"] in ("90d", "2900d", "1450d", "720d", "360d"):
+            return json.dumps({"timeline": [{"series": "Average Tone", "data": [{"date": "20261009T001500Z", "value": -1.0}]}]}).encode()
+        return inner(url)
+    daily, st = news.update_daily(tmp_path / "d.csv", NOW, fetcher=fetch, sleep=0, log=silent)
+    assert st["ok"] and st["span"] == "3months" and len(daily) > 80
+    assert any("only 1 day(s) usable (1 rows, first 20261009T001500Z" in e for e in st["errors"])
+    assert "3months" in seen and seen.index("90d") < seen.index("3months")
+
+
+def test_timeline_dates_in_other_formats_still_parse():
+    obj = {"timeline": [{"series": "a", "data": []}, {"series": "b", "data": [
+        {"date": "2026-10-01 12:00:00", "value": "-2.5"}, {"date": "20261002120000", "value": -1.0}]}]}
+    s = news.parse_timeline(obj)
+    assert list(s.index) == [pd.Timestamp("2026-10-01"), pd.Timestamp("2026-10-02")] and s.iloc[0] == -2.5
+    assert "2 rows" in news.describe_reply(obj) and "keys" in news.describe_reply({"x": 1})
 
 
 def test_a_dead_news_source_keeps_the_archive_and_never_raises(tmp_path):
