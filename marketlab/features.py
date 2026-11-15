@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from . import config as C
+from . import macro as macro_mod
 
 MARKET_NON_FEATURES = {"date", "px", "regime", "fwd_ret", "fwd_simple", "fwd_vol", "fmin_ret", "y_up", "y_crash"}
 STOCK_TARGETS = ("date", "ticker", "fwd_ret", "excess", "up")
@@ -58,11 +59,13 @@ def macro_features(macro):
     return mac
 
 
-def market_frame(name, ds, mac):
+def market_frame(name, ds, mac, ext=None):
     """Features and targets for one market index. Returns (full, training_rows, FEATURES).
 
     `full` keeps the most recent rows (no outcome yet) so they can be forecast; `training_rows`
-    holds only rows whose outcome is already known.
+    holds only rows whose outcome is already known. With `ext` (see macro.build_ext) the frame also carries the
+    extra global-driver columns (named mx_...) and FEATURES lists them last; rows are kept or dropped by the original
+    columns alone, so the model with and without the extras is compared on exactly the same days.
     """
     px = ds.idx[name].dropna()
     own = own_features(px)
@@ -75,7 +78,10 @@ def market_frame(name, ds, mac):
         oth[f"{m}_ret_5"] = lp.diff(5)
         oth[f"{m}_ret_21"] = lp.diff(21)
 
-    ctx = pd.concat([oth, mac], axis=1)
+    parts = [oth, mac]
+    if ext is not None and ext.date.shape[1]:
+        parts.append(ext.date)
+    ctx = pd.concat(parts, axis=1)
     # Lag the context so a market that closes later in the day cannot leak into this one.
     ctx = ctx.reindex(px.index.union(ctx.index)).ffill().shift(C.LAG).reindex(px.index)
     f = own.join(ctx)
@@ -104,7 +110,7 @@ def market_frame(name, ds, mac):
     f.index.name = "date"
     f = f.reset_index()
     FEATURES = [c for c in f.columns if c not in MARKET_NON_FEATURES]
-    f = f.dropna(subset=FEATURES)
+    f = f.dropna(subset=macro_mod.base_features(FEATURES))
     data = f.dropna(subset=["fwd_ret", "fwd_vol", "fmin_ret"]).copy()
     data[["y_up", "y_crash"]] = data[["y_up", "y_crash"]].astype(int)
     return f, data, FEATURES
@@ -152,14 +158,21 @@ def stock_context(ds):
     return mf.ffill()
 
 
-def stock_panel(ds):
-    """Stack all stocks into one panel. Returns (full, training_rows, FEATURES)."""
+def stock_panel(ds, ext=None):
+    """Stack all stocks into one panel. Returns (full, training_rows, FEATURES).
+
+    With `ext` (see macro.build_ext) each stock also gets how sensitive it has been to rates, the dollar, oil, credit
+    and market fear, and how far those drivers have recently pushed it (columns named mx_...). Rows are kept or
+    dropped by the original columns alone, so the ranker with and without the extras sees the same rows.
+    """
     mf = stock_context(ds)
     rows = []
     for t in ds.stocks:
         c = ds.close[t].dropna()
         v = ds.volume[t].reindex(c.index)
         df = stock_features(c, v).join(mf.reindex(c.index))
+        if ext is not None:
+            df = df.join(ext.stock_frame(t, c.index))
         df["rs_20"] = df["ret_20"] - df["mkt_ret_20"]
         df["rs_60"] = df["ret_60"] - df["mkt_ret_60"]
         df.index.name = "date"
@@ -169,10 +182,12 @@ def stock_panel(ds):
     # Where does each stock sit versus the others on the same day?
     for col in ["ret_20", "ret_60", "vol_20", "rsi_14", "mom_12_1"]:
         sfull[f"{col}_rk"] = sfull.groupby("date")[col].rank(pct=True)
+    if "mx_push_total" in sfull.columns:
+        sfull["mx_push_total_rk"] = sfull.groupby("date")["mx_push_total"].rank(pct=True)
     sfull["excess"] = sfull["fwd_ret"] - sfull.groupby("date")["fwd_ret"].transform("mean")
     sfull["up"] = np.where(sfull["excess"].notna(), (sfull["excess"] > 0).astype(float), np.nan)
     FEATURES = [c for c in sfull.columns if c not in STOCK_TARGETS]
-    sfull = sfull.dropna(subset=FEATURES)
+    sfull = sfull.dropna(subset=macro_mod.base_features(FEATURES))
     sdata = sfull.dropna(subset=["fwd_ret"]).copy()
     sdata["up"] = sdata["up"].astype(int)
     return sfull, sdata, FEATURES
