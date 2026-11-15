@@ -47,9 +47,9 @@ _NOISE = np.random.default_rng(11).normal(0, 0.5, 20000)
 
 
 def _span_days(span):
-    m = re.match(r"(\d+)(months|days)", span)
+    m = re.match(r"(\d+)(months|weeks|days|d)$", span)
     n = int(m.group(1))
-    return n * 30 if m.group(2) == "months" else n
+    return {"months": n * 30, "weeks": n * 7}.get(m.group(2), n)
 
 
 def fake_gdelt(last="2026-10-08", calls=None, fail=None, tone_shift=0.0):
