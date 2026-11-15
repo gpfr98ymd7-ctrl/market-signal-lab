@@ -1,0 +1,148 @@
+# Market Lab watchlist: the stocks the app follows and ranks every week.
+#
+# How to edit from your phone: open this file in the GitHub app or on github.com, tap the pencil,
+# change the lines, then tap Commit changes. Run "Weekly forecast" from the Actions tab to see the result
+# straight away (otherwise it is picked up on Friday).
+#
+# Why the list is long: the Growth watch picks the top 20 stocks each week. That only means something
+# if it chooses 20 from a much bigger crowd, so keep at least 60 tickers in here.
+#
+# Rules
+#  - One ticker per line (commas and spaces also work). Anything after a # is a comment.
+#  - Use Yahoo Finance tickers: US shares as they are (AAPL), UK shares end in .L (BARC.L),
+#    Germany .DE, France .PA, Netherlands .AS, Italy .MI, Spain .MC, Switzerland .SW, Denmark .CO, Japan .T.
+#  - Share classes use a dash: BRK-B.
+#  - Use at least 14 and at most 120 tickers. With fewer than 14 the built-in list is used instead,
+#    and the dashboard says so.
+#  - Shares from other countries work too, but the app has no index for them, so they get the S&P 500
+#    risk scaler. A ticker needs more than a year of price history, so very new listings are skipped.
+#  - A mistyped ticker is skipped and shown as a data warning on the dashboard; it never stops the run.
+#  - If you change many tickers, the monthly model check is redone on the next run (it takes longer).
+#  - Removing a stock never changes your paper-trading history, which is frozen week by week.
+
+# United States: large technology and internet
+AAPL
+MSFT
+NVDA
+AMZN
+GOOGL
+META
+AVGO
+TSLA
+NFLX
+ORCL
+CRM
+ADBE
+NOW
+INTU
+PANW
+CRWD
+DDOG
+SNOW
+NET
+PLTR
+UBER
+ABNB
+SHOP
+PYPL
+BKNG
+
+# United States: semiconductors
+AMD
+QCOM
+MU
+AMAT
+LRCX
+KLAC
+TXN
+INTC
+
+# United States: healthcare
+LLY
+ISRG
+VRTX
+REGN
+AMGN
+ABBV
+TMO
+UNH
+JNJ
+PFE
+
+# United States: financials
+JPM
+BAC
+GS
+MS
+V
+MA
+AXP
+BLK
+
+# United States: consumer
+COST
+WMT
+HD
+NKE
+SBUX
+MCD
+CMG
+PG
+KO
+PEP
+
+# United States: industrials, energy, materials
+CAT
+DE
+GE
+HON
+XOM
+CVX
+COP
+SLB
+FCX
+LIN
+
+# United Kingdom
+AZN.L
+SHEL.L
+HSBA.L
+ULVR.L
+BP.L
+GSK.L
+RIO.L
+DGE.L
+BARC.L
+LLOY.L
+BATS.L
+REL.L
+RR.L
+LSEG.L
+BA.L
+GLEN.L
+
+# Europe
+SAP.DE
+SIE.DE
+ALV.DE
+IFX.DE
+MC.PA
+AIR.PA
+OR.PA
+RMS.PA
+SU.PA
+ASML.AS
+ADYEN.AS
+RACE.MI
+NESN.SW
+NOVN.SW
+ROG.SW
+NOVO-B.CO
+
+# Japan
+7203.T
+6758.T
+8035.T
+9984.T
+6861.T
+7974.T
