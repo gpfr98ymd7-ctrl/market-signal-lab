@@ -160,24 +160,58 @@ def get_json(url, fetcher=None, retries=1, wait=15.0):
     raise NewsError(last)
 
 
+def _parse_date(x):
+    """'20261001T120000Z', '20261001120000' and '2026-10-01 12:00' all give the calendar day, or None."""
+    m = re.match(r"^\s*(\d{4})-?(\d{2})-?(\d{2})", str(x))
+    if not m:
+        return None
+    try:
+        return pd.Timestamp(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except Exception:
+        return None
+
+
+def _timeline_rows(obj):
+    """The first series in a GDELT timeline reply that has any rows."""
+    tl = (obj or {}).get("timeline") if isinstance(obj, dict) else None
+    for ser in (tl or []):
+        rows = (ser or {}).get("data") if isinstance(ser, dict) else None
+        if rows:
+            return rows
+    return []
+
+
 def parse_timeline(obj):
     """A GDELT timeline reply to a daily pandas Series (date -> value). Empty if there is no data."""
-    tl = (obj or {}).get("timeline") if isinstance(obj, dict) else None
-    rows = ((tl or [{}])[0] or {}).get("data") or []
     dates, vals = [], []
-    for r in rows:
+    for r in _timeline_rows(obj):
         try:
-            d = pd.Timestamp(str(r["date"])[:8])
+            d = _parse_date(r["date"])
             v = float(r["value"])
         except Exception:
             continue
-        if math.isfinite(v):
+        if d is not None and math.isfinite(v):
             dates.append(d)
             vals.append(v)
     if not vals:
         return pd.Series(dtype=float)
     s = pd.Series(vals, index=pd.DatetimeIndex(dates), dtype=float)
     return s.groupby(level=0).mean().sort_index()           # hourly buckets become daily
+
+
+def describe_reply(obj):
+    """A short description of what GDELT actually sent, shown when a reply is not usable, so the cause is visible."""
+    if not isinstance(obj, dict):
+        return "reply was not an object"
+    if not obj:
+        return "empty reply"
+    rows = _timeline_rows(obj)
+    if not rows:
+        return "no timeline rows; keys: " + ",".join(sorted(map(str, obj.keys())))[:60]
+    first, last = rows[0], rows[-1]
+    fd = str((first or {}).get("date"))[:20] if isinstance(first, dict) else "?"
+    ld = str((last or {}).get("date"))[:20] if isinstance(last, dict) else "?"
+    return f"{len(rows)} rows, first {fd}, last {ld}"
 
 
 def parse_articles(obj, limit=3):
@@ -242,21 +276,24 @@ def update_daily(path, now, fetcher=None, sleep=5.0, log=print, keys=None):
 
     # Which window to ask for? A long one while the archive is short (at most once a month), else the live window.
     have = int(old["global_tone"].notna().sum()) if "global_tone" in old.columns else 0
-    spans = ["3months"]
+    live = list(opts.get("NEWS_LIVE_SPANS"))
+    spans = list(live)
     try:
-        last_try = pd.Timestamp(meta.get("long_backfill_tried")) if meta.get("long_backfill_tried") else None
+        last_try = pd.Timestamp(meta.get("long_backfill_tried_v2")) if meta.get("long_backfill_tried_v2") else None
     except Exception:
         last_try = None
     retry_days = opts.get("NEWS_BACKFILL_RETRY_DAYS")
     if have < 700 and (last_try is None or (now - last_try).days >= retry_days):
         spans = list(opts.get("NEWS_BACKFILL_SPANS")) + spans
-        meta["long_backfill_tried"] = now.strftime("%Y-%m-%d")
+        meta["long_backfill_tried_v2"] = now.strftime("%Y-%m-%d")
 
     first = {}
     chosen = None
     for span in spans:
         try:
-            s = fetch("global", "timelinetone", span)
+            status["requests"] += 1
+            obj = get_json(gdelt_url(queries["global"], "timelinetone", span), fetcher, wait=wait)
+            s = parse_timeline(obj)
         except NewsError as e:
             status["errors"].append(f"{span}: {e}")
             log(f"News: window {span} failed ({e})")
@@ -265,14 +302,16 @@ def update_daily(path, now, fetcher=None, sleep=5.0, log=print, keys=None):
         if len(s) >= 20:
             chosen, first["global_tone"] = span, s
             break
-        status["errors"].append(f"{span}: only {len(s)} days returned")
+        why = f"{span}: only {len(s)} day(s) usable ({describe_reply(obj)})"
+        status["errors"].append(why)
+        log(f"News: {why}")
         pause()
     if chosen is None:
         util.write_json_atomic(meta_path, meta)
         log("News: GDELT gave no usable series; keeping the archive as it is.")
         return old, status
     status["span"] = chosen
-    if chosen != "3months":
+    if chosen not in live:
         meta["long_backfill_ok"] = chosen
     util.write_json_atomic(meta_path, meta)
     log(f"News: using the {chosen} window.")
@@ -359,8 +398,26 @@ def news_view(daily):
 
 
 # ---------------------------------------------------------------- news check for the top picks
-def stock_news(tickers, now, fetcher=None, sleep=5.0, log=print):
-    queries = opts.get("NEWS_STOCK_QUERIES")
+_NAME_SUFFIX = re.compile(r"[,.]?\s+(incorporated|inc|corporation|corp|company|co|plc|ltd|limited|n\.?v|s\.?a|se|ag|"
+                          r"holdings?|group|class [a-c]|adr|ord|common stock)\.?\s*$", re.I)
+
+
+def name_query(name):
+    """A search phrase from a company's short name, for stocks without a hand-written one. None if unusable."""
+    n = str(name or "").strip()
+    for _ in range(3):
+        m = _NAME_SUFFIX.search(n)
+        if not m:
+            break
+        n = n[:m.start()].strip()
+    n = re.sub(r"[^\w &'\-]", " ", n).strip()
+    if len(n) < 3 or len(n) > 40:
+        return None
+    return f'("{n}")'
+
+
+def stock_news(tickers, now, fetcher=None, sleep=5.0, log=print, extra_queries=None):
+    queries = {**(extra_queries or {}), **opts.get("NEWS_STOCK_QUERIES")}      # hand-written phrases win
     now = pd.Timestamp(now).normalize()
     wait = max(3 * sleep, 0.0)
     out, errors, consecutive = [], [], 0
@@ -371,10 +428,10 @@ def stock_news(tickers, now, fetcher=None, sleep=5.0, log=print):
         try:
             if sleep > 0:
                 time.sleep(sleep)
-            ts = parse_timeline(get_json(gdelt_url(q, "timelinetone", "14days"), fetcher, wait=wait))
+            ts = parse_timeline(get_json(gdelt_url(q, "timelinetone", "14d"), fetcher, wait=wait))
             if sleep > 0:
                 time.sleep(sleep)
-            arts = parse_articles(get_json(gdelt_url(q, "artlist", "7days", {"maxrecords": "10", "sort": "datedesc"}),
+            arts = parse_articles(get_json(gdelt_url(q, "artlist", "7d", {"maxrecords": "10", "sort": "datedesc"}),
                                            fetcher, wait=wait), limit=3)
             consecutive = 0
         except NewsError as e:
@@ -596,18 +653,20 @@ def experiment_cached(cache_path, frames, daily, run_date, force=False, log=prin
 
 # ---------------------------------------------------------------- one call for the weekly run
 def update(log_dir, now, picks, frames, headline_items=None, fetcher=None, sleep=5.0, force_experiment=False,
-           pick_check=None, log=print):
+           pick_check=None, log=print, name_queries=None):
     """Everything news-related for one run. Returns the dashboard block. Never raises for network problems."""
     log_dir = Path(log_dir)
     now = pd.Timestamp(now)
     _DEADLINE[0] = time.time() + opts.get("NEWS_TIME_BUDGET")
     try:
-        return _update(log_dir, now, picks, frames, headline_items, fetcher, sleep, force_experiment, pick_check, log)
+        return _update(log_dir, now, picks, frames, headline_items, fetcher, sleep, force_experiment, pick_check, log,
+                       name_queries)
     finally:
         _DEADLINE[0] = None
 
 
-def _update(log_dir, now, picks, frames, headline_items, fetcher, sleep, force_experiment, pick_check, log):
+def _update(log_dir, now, picks, frames, headline_items, fetcher, sleep, force_experiment, pick_check, log,
+            name_queries=None):
     arch, added = archive_headlines(log_dir / "news_headlines.csv", headline_items, now)
     block = {"available": False, "source": "GDELT", "archive": archive_view(arch), "series": [], "picks": [],
              "experiment": None, "errors": []}
@@ -622,7 +681,7 @@ def _update(log_dir, now, picks, frames, headline_items, fetcher, sleep, force_e
     if pick_check is None:
         pick_check = opts.get("NEWS_PICK_CHECK")
     if pick_check and picks and status["ok"]:
-        block["picks"], errs = stock_news(picks, now, fetcher=fetcher, sleep=sleep, log=log)
+        block["picks"], errs = stock_news(picks, now, fetcher=fetcher, sleep=sleep, log=log, extra_queries=name_queries)
         block["errors"] += errs[:3]
 
     try:
