@@ -38,9 +38,9 @@ h4 { font-size: 14px; margin: 14px 0 4px; }
 p { margin: 6px 0; }
 a { color: var(--accent); }
 .sub { color: var(--muted); font-size: 13px; }
-.tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; padding: 10px 0 8px; margin: 8px 0 0;
+.tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 3px; padding: 10px 0 8px; margin: 8px 0 0;
   background: var(--bg); border-bottom: 1px solid var(--line); }
-.tabs a { flex: 1; text-align: center; text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 600;
+.tabs a { flex: 1; text-align: center; text-decoration: none; color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap;
   padding: 8px 4px; border-radius: 10px; background: transparent; }
 .tabs a.on { background: var(--card); color: var(--ink); border: 1px solid var(--line); padding: 7px 3px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
@@ -86,6 +86,11 @@ a { color: var(--accent); }
 .sel { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 10px; }
 .chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--chip); margin-left: 6px; font-weight: 500; }
 .chip.new { background: var(--info-bg); color: var(--info); }
+.chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.good { background: var(--good-bg); color: var(--good); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+.stock .chip { margin: 0 4px 3px 0; }
+#app .card > .kv > span:first-child { max-width: 62%; }
 .kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .kv:first-of-type { border-top: 0; }
 .kv span:first-child { color: var(--muted); }
@@ -297,7 +302,9 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
     var ar = n.archive || {};
     var arch = ar.n ? '<p class="s">' + esc(ar.n) + ' headlines archived since ' + esc(ar.since) + '.</p>' : "";
     if (!n.available) {
-      return '<section class="card"><h3>News tone</h3><p class="note">The news source (GDELT) did not give a usable answer this week, so there is no tone reading. The next run will try again.</p>' + arch + '</section>';
+      var errs = arr(n.errors).slice(0, 3).map(function (e) { return esc(String(e).slice(0, 160)); });
+      var why = errs.length ? '<p class="s">What it received: ' + errs.join("; ") + '</p>' : "";
+      return '<section class="card"><h3>News tone</h3><p class="note">The news source (GDELT) did not give a usable answer this week, so there is no tone reading. The next run will try again.</p>' + why + arch + '</section>';
     }
     var rows = arr(n.series).map(function (x) {
       var label = x.label ? '<span class="pill ' + (TONE[x.label] || "") + '">' + esc(x.label) + '</span>' : '<span class="pill">building history</span>';
@@ -317,7 +324,7 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
         alerts.map(function (a) { return "<li>" + esc(a.text) + "</li>"; }).join("") + '</ul></div>'
       : '<div class="banner info">No alerts this week.</div>';
     return '<section class="card"><div class="k">This week</div><p class="headline">' + esc(d.headline) + '</p></section>' +
-      al + notesCard(d) + changesCard(d) + glance(d) + newsCard(d) + outlookCard(d) + headlinesCard(d);
+      al + notesCard(d) + changesCard(d) + glance(d) + growthTeaser(d) + globalTeaser(d) + newsCard(d) + outlookCard(d) + headlinesCard(d);
   }
 
   // ------------------------------------------------------------------ markets
@@ -369,7 +376,7 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
     });
     ax = Math.ceil(ax);
     return '<p class="note">Probabilities are pulled toward their long-run base rates by as much as the model has failed to earn that in testing. Pills show how each forecast has performed historically.</p>' +
-      arr(d.markets).map(function (m) { return marketCard(m, ax, days); }).join("");
+      globalCard(d) + arr(d.markets).map(function (m) { return marketCard(m, ax, days); }).join("");
   }
 
   // ------------------------------------------------------------------ stocks
@@ -445,12 +452,286 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
         '<div class="right">' + w + '</div></div>';
     }).join("");
     var delay = (d.horizons || {}).entry_delay;
-    return '<section class="card"><div class="row"><h3>Stock ranker</h3>' + label + '</div>' +
+    var inputsPill = sm.inputs === "macro" ? ' <span class="pill info">uses global drivers</span>' : "";
+    return '<section class="card"><div class="row"><h3>Stock ranker</h3><span>' + label + inputsPill + '</span></div>' +
       '<p class="note">Odds of beating the universe average over the next ' + esc((d.horizons || {}).stock_days) + ' trading days' +
       (delay ? ", assuming you buy " + esc(delay) + " trading day" + (delay > 1 ? "s" : "") + " after the signal date" : "") +
       '. Odds are pulled toward the ' + pct(sm.base, 1) + ' base rate (the model keeps ' + pct(sm.lam) + ' of its signal). The ranking itself uses the raw score.</p></section>' +
       '<section class="card"><div class="s" style="margin-bottom:6px">Highlighted rows form the illustrative top-' + esc(p.top_k) + ' portfolio: invested ' + pct(p.invested) +
-      ', cash ' + pct(p.cash) + (isNum(p.turnover) ? '; turnover vs last run ' + pct(p.turnover) : "") + '.</div>' + rows + '</section>' + fundCard(d);
+      ', cash ' + pct(p.cash) + (isNum(p.turnover) ? '; turnover vs last run ' + pct(p.turnover) : "") + '.</div>' + rows + '</section>' + fundCard(d) + watchlistCard(d);
+  }
+
+  // ------------------------------------------------------------------ growth watch, paper trading, global drivers
+  function chipList(list, cls) {
+    return arr(list).map(function (t) { return '<span class="chip ' + (cls || "") + '">' + esc(t) + '</span>'; }).join("");
+  }
+  function tagChips(p) {
+    var out = "";
+    arr(p.tags).forEach(function (t) {
+      out += '<span class="chip ' + (/^no company/.test(t) ? "" : "warn") + '">' + esc(t) + '</span>';
+    });
+    arr(p.macro_tags).forEach(function (t) {
+      out += '<span class="chip ' + (/tailwind/.test(t) ? "good" : "bad") + '">' + esc(t) + '</span>';
+    });
+    if (p.news && /lower/.test(p.news)) out += '<span class="chip warn">news tone lower</span>';
+    return out;
+  }
+  var VERDICT_TXT = { "too early": "too early to judge", "positive so far": "ahead so far", "negative so far": "behind so far", "no clear edge": "no clear edge" };
+  function verdictPill(v) {
+    var cls = { "positive so far": "good", "negative so far": "bad" }[v] || "";
+    return '<span class="pill ' + cls + '">' + esc(VERDICT_TXT[v] || v || "too early to judge") + '</span>';
+  }
+
+  function paperCurve(rows) {
+    rows = arr(rows).filter(function (r) { return isNum(r.paper); });
+    if (rows.length < 2) return "";
+    var keys = [["paper", "currentColor", ""], ["basket", "var(--warn)", "5 3"], ["spx", "var(--muted)", "1.5 3"]];
+    var all = [100];
+    rows.forEach(function (r) { keys.forEach(function (k) { if (isNum(r[k[0]])) all.push(r[k[0]]); }); });
+    var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+    if (hi === lo) { hi += 1; lo -= 1; }
+    function line(k) {
+      var pts = rows.filter(function (r) { return isNum(r[k[0]]); }).map(function (r, i, a) {
+        return (i / Math.max(a.length - 1, 1) * 100).toFixed(2) + "," + (58 - (r[k[0]] - lo) / (hi - lo) * 54).toFixed(2);
+      }).join(" ");
+      return '<polyline points="' + pts + '" fill="none" stroke="' + k[1] + '" stroke-width="1.6" ' + (k[2] ? 'stroke-dasharray="' + k[2] + '" ' : "") +
+        'vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
+    }
+    var base = 58 - (100 - lo) / (hi - lo) * 54;
+    return '<svg class="spark" style="height:90px;color:var(--accent)" viewBox="0 0 100 60" preserveAspectRatio="none" role="img" aria-label="Paper account compared with the equal-weight basket and the S&amp;P 500, starting at 100">' +
+      '<line x1="0" x2="100" y1="' + base.toFixed(2) + '" y2="' + base.toFixed(2) + '" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
+      keys.map(line).join("") + '</svg>' +
+      '<div class="legend"><span><svg viewBox="0 0 22 8"><line x1="0" x2="22" y1="4" y2="4" stroke="var(--accent)" stroke-width="2"/></svg>paper portfolio</span>' +
+      '<span><svg viewBox="0 0 22 8"><line x1="0" x2="22" y1="4" y2="4" stroke="var(--warn)" stroke-width="2" stroke-dasharray="5 3"/></svg>equal-weight basket</span>' +
+      '<span><svg viewBox="0 0 22 8"><line x1="0" x2="22" y1="4" y2="4" stroke="var(--muted)" stroke-width="2" stroke-dasharray="1.5 3"/></svg>S&amp;P 500</span></div>';
+  }
+
+  function openLine(op) {
+    if (!op) return "";
+    var mk = op.mark, out = "";
+    if (mk) {
+      out = (mk.since === mk.through ? "Bought at the latest close. " :
+        (op.status === "waiting to be bought" ? "Last week's portfolio, held since " : "Held since ") + esc(mk.since) + ": " + signed(mk.ret_pct, 2) +
+        " (basket " + signed(mk.basket_pct, 2) + ", S&amp;P 500 " + signed(mk.spx_pct, 2) + "). ");
+    }
+    if (op.status === "waiting to be bought") out += "This week's portfolio is bought at the next trading day's close.";
+    return out;
+  }
+
+  // The status of one paper portfolio, short form (Growth tab and Overview)
+  function paperStatus(b, title) {
+    if (!b) return "";
+    if (!b.available) {
+      return '<section class="card"><h3>' + esc(title) + '</h3><p class="note">' + esc(b.reason || "Not available this week.") + '</p></section>';
+    }
+    var out = '<section class="card"><div class="row"><h3>' + esc(title) + '</h3>' + verdictPill(b.verdict) + '</div>';
+    if (b.weeks > 0) {
+      out += '<div class="grid3"><div><div class="k">Paper account</div><div class="v">' + signed(b.total_pct, 1) + '</div><div class="s">since ' + esc(b.start) + '</div></div>' +
+        '<div><div class="k">Basket</div><div class="v">' + signed(b.basket_total_pct, 1) + '</div><div class="s">equal-weight</div></div>' +
+        '<div><div class="k">S&amp;P 500</div><div class="v">' + signed(b.spx_total_pct, 1) + '</div><div class="s">same days</div></div></div>' + paperCurve(b.curve);
+    } else {
+      out += '<p class="note" style="margin-top:6px">No week has finished yet. ' + openLine(b.open) + '</p>';
+    }
+    out += '<div class="s" style="margin-top:8px">' + esc(b.weeks) + ' of ' + esc(b.min_weeks) + ' weeks needed before any verdict. Pretend money, ' + esc(b.cost_bps) + ' bps cost on every trade. ' +
+      (b.weeks > 0 ? openLine(b.open) : "") + '</div>';
+    return out + '</section>';
+  }
+
+  var ACT = { sell: ["Sell", "bad"], buy: ["Buy", "good"], trim: ["Trim", "warn"], add: ["Add", "info"] };
+  function tradesCard(b) {
+    var t = b && b.trades;
+    if (!t) return "";
+    var rows = arr(t.rows).filter(function (r) { return r.action !== "hold"; });
+    var hold = arr(t.rows).filter(function (r) { return r.action === "hold"; }).map(function (r) { return esc(r.ticker); });
+    var out = '<section class="card"><h3>Paper trades this week</h3><p class="note" style="margin-top:2px">' +
+      (t.first ? "First week: everything is bought from cash. " : "The orders that turn last week's holdings into this week's portfolio. ") +
+      'Pretend orders, placed at ' + esc(t.buy_on) + '. Trading cost about ' + num(t.est_cost_pct, 2) + '% of the account.</p>';
+    if (!rows.length) out += '<div class="s" style="margin-top:6px">No trades: the portfolio is unchanged.</div>';
+    rows.forEach(function (r) {
+      var a = ACT[r.action] || [r.action, ""];
+      out += '<div class="kv"><span><span class="pill ' + a[1] + '">' + esc(a[0]) + '</span> <strong>' + esc(r.ticker) + '</strong></span><span>' +
+        pct(r.from_w, 1) + ' &rarr; ' + pct(r.to_w, 1) + '</span></div>';
+    });
+    if (hold.length) out += '<div class="s" style="margin-top:8px">Unchanged: ' + hold.join(", ") + '</div>';
+    return out + '</section>';
+  }
+
+  function growthList(g) {
+    return arr(g.picks).map(function (p) {
+      var bits = ["score " + num(p.score, 0), "swing " + num(p.swing_pct, 1) + "% a week"];
+      if (isNum(p.growth)) bits.push("growth rank " + num(p.growth, 0));
+      if (isNum(p.rev_growth_pct)) bits.push("sales " + signed(p.rev_growth_pct, 0));
+      if (isNum(p.ret_20)) bits.push("20d " + signed(p.ret_20 * 100));
+      return '<div class="stock sel"><div class="rank">' + esc(p.rank) + '</div><div><span class="tick">' + esc(p.ticker) + '</span>' +
+        (p.name ? ' <span class="s">' + esc(p.name) + '</span>' : "") + '<div class="s">' + bits.map(esc).join(" | ") + '</div>' +
+        (arr(p.tags).length || arr(p.macro_tags).length || p.news ? '<div style="margin-top:3px">' + tagChips(p) + '</div>' : "") +
+        '</div><div class="right"><div class="v" style="font-size:17px">' + pct(p.w, 1) + '</div><div class="s">weight</div></div></div>';
+    }).join("");
+  }
+
+  function growthChecks(g) {
+    var c = g.concentration, out = "";
+    if (c) {
+      out += kv("How alike they move", isNum(c.avg_corr) ? num(c.avg_corr, 2) + " average correlation (1 = identical)" : "n/a") +
+        kv("Largest group that moves together", esc(c.cluster_size) + " of " + esc(c.n)) +
+        kv("Typical weekly swing of the basket", num(c.basket_swing_pct, 1) + "% either way");
+    }
+    var p = g.portfolio || {};
+    if (isNum(p.top_w)) out += kv("Biggest and smallest weight", pct(p.top_w, 1) + " and " + pct(p.low_w, 1));
+    if (isNum(p.scaler_exposure)) out += kv("Market-risk scaler would hold", pct(p.scaler_exposure) + ' <span class="s">(not applied here)</span>');
+    return out;
+  }
+
+  function growthHow(g) {
+    var w = g.weights || {}, l = g.labels || {};
+    var parts = Object.keys(w).map(function (k) { return '<li><strong>' + esc(l[k] || k) + ' ' + pct(w[k]) + '</strong></li>'; }).join("");
+    var tilt = (g.portfolio || {}).tilt;
+    return '<details><summary>How the list is chosen</summary><p class="note">Each stock the app follows (' + esc(g.universe) + ' this week) gets a 0 to 100 score from four ranked parts:</p>' +
+      '<ul class="plain">' + parts + '</ul>' +
+      '<p class="note">Weighting: ' + (isNum(tilt) ? pct(tilt) : "half") + ' of the portfolio is weighted by score and the rest is split equally, with no stock above ' + pct((g.portfolio || {}).max_w) + '. ' +
+      'The top ' + esc(g.n) + ' are "bought" one trading day after the signal and swapped every week. ' +
+      'Global drivers (rates, dollar, oil, credit, market fear) add the green and red tags only: they do not change a score. ' +
+      'Nothing here is proven: the Trust tab shows how the model, and this list, have actually done.</p></details>';
+  }
+
+  function tabGrowth(d) {
+    var g = d.growth, pp = d.paper || {};
+    if (!g) {
+      return '<section class="card"><h3>Growth watch</h3><p class="note">This data was made before the Growth watch existed. It appears after the next weekly run.</p></section>';
+    }
+    if (!g.available) {
+      return '<section class="card"><h3>Growth watch</h3><p class="note">' + esc(g.reason || "Not available this week.") + '</p></section>' + paperStatus(pp.growth, "Growth paper portfolio");
+    }
+    var notes = arr(g.notes).length ? '<ul class="plain">' + arr(g.notes).map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + '</ul>' : "";
+    return '<section class="card"><h3>Growth watch: top ' + esc(g.n) + '</h3><p class="note" style="margin-top:2px">The ' + esc(g.n) +
+      ' stocks out of ' + esc(g.universe) + ' with the most upside potential over the next ' + esc(g.horizon) + ', as of ' + esc(g.as_of) +
+      '. Bigger possible gains mean bigger possible losses. This is a risk list built on a model with no proven edge, not advice, and it is paper-traded only.</p></section>' +
+      paperStatus(pp.growth, "Growth paper portfolio") + tradesCard(pp.growth) +
+      '<section class="card"><div class="s" style="margin-bottom:6px">Weights add up to 100%. Highest score first.</div>' + growthList(g) + '</section>' +
+      '<section class="card"><h3>Before you read anything into it</h3>' + notes + growthChecks(g) + growthHow(g) + '</section>';
+  }
+
+  function growthTeaser(d) {
+    var g = d.growth, b = (d.paper || {}).growth;
+    if (!g || !g.available) return "";
+    var top = arr(g.picks).slice(0, 8).map(function (p) { return '<span class="chip">' + esc(p.ticker) + ' ' + pct(p.w, 0) + '</span>'; }).join("");
+    var acc = b && b.available && b.weeks > 0 ? kv("Paper account", signed(b.total_pct, 1) + " vs basket " + signed(b.basket_total_pct, 1) + " (" + esc(b.weeks) + " week" + (b.weeks === 1 ? "" : "s") + ")") :
+      '<div class="s">The paper account starts with this week\'s portfolio.</div>';
+    return '<section class="card"><div class="row"><h3>Growth watch</h3><a href="#growth">See all ' + esc(g.n) + '</a></div>' +
+      '<p class="note" style="margin-top:2px">Top ' + esc(g.n) + ' by upside potential for the next ' + esc(g.horizon) + '. A risk list, not advice.</p>' +
+      '<div style="margin:8px 0 4px 0">' + top + (g.n > 8 ? '<span class="chip">+' + (g.n - 8) + ' more</span>' : "") + '</div>' + acc + '</section>';
+  }
+
+  // Global drivers -------------------------------------------------------
+  function driverRow(r) {
+    var tone = r.state === "unusually high" ? "warn" : (r.state === "unusually low" ? "info" : "");
+    var lvl = isNum(r.level) ? (Math.abs(r.level) >= 1000 ? Math.round(r.level) : num(r.level, Math.abs(r.level) < 10 ? 2 : 1)) : "n/a";
+    return '<div class="kv"><span>' + esc(r.label) + '<div class="s">' + (isNum(r.level) ? esc(lvl) + ' now | ' : "") + esc(r.window) + '</div></span><span>' + signed(r.change, 1).replace(/%$/, "") + esc(r.unit === "%" ? "%" : " " + r.unit) +
+      (r.state !== "normal" ? '<div><span class="pill ' + tone + '">' + esc(r.state) + '</span></div>' : "") + '</span></div>';
+  }
+
+  function globalCard(d) {
+    var g = d.global;
+    if (!g) return "";
+    if (!g.available) return '<section class="card"><h3>Global drivers</h3><p class="note">The readings were not available this week.</p></section>';
+    var rows = arr(g.rows), groups = {}, order = [];
+    rows.forEach(function (r) { if (!groups[r.group]) { groups[r.group] = []; order.push(r.group); } groups[r.group].push(r); });
+    var odd = rows.filter(function (r) { return r.state !== "normal"; });
+    var notes = arr(g.notes).length ? '<ul class="plain">' + arr(g.notes).map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + '</ul>' : "";
+    var used = [];
+    if ((d.stock_model || {}).inputs === "macro") used.push("the stock ranker");
+    var nm = arr(d.markets).filter(function (m) { return m.inputs === "macro"; }).length;
+    if (nm) used.push(nm + " of " + arr(d.markets).length + " market models");
+    return '<section class="card"><h3>Global drivers</h3><p class="note" style="margin-top:2px">The forces that move many markets at once: interest rates, currencies, commodities, credit, market fear, and how emerging markets, chips and small companies are doing. Changes are over the last month unless stated.</p>' +
+      (notes || '<div class="s" style="margin-top:6px">Nothing unusual this week.</div>') +
+      (odd.length ? '<h4>Unusual right now</h4>' + odd.map(driverRow).join("") : "") +
+      '<details><summary>All ' + rows.length + ' drivers</summary>' + order.map(function (k) {
+        return '<h4>' + esc(k) + '</h4>' + groups[k].map(driverRow).join("");
+      }).join("") + '</details>' +
+      '<p class="note">' + (used.length ? "The forecasts use these as inputs for " + esc(used.join(" and ")) + ", because the monthly test showed a clear gain."
+        : "The forecasts do not use the extra drivers yet: they are used only if the monthly test on the Trust tab shows a clear gain. They still shape the tags on the Growth tab.") + '</p></section>';
+  }
+
+  function globalTeaser(d) {
+    var g = d.global;
+    if (!g || !g.available || !arr(g.notes).length) return "";
+    return '<section class="card"><div class="row"><h3>Global drivers</h3><a href="#markets">All readings</a></div><ul class="plain">' +
+      arr(g.notes).slice(0, 3).map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + '</ul></section>';
+  }
+
+  function watchlistCard(d) {
+    var w = d.watchlist;
+    if (!w) return "";
+    var notes = arr(w.notes).length ? '<ul class="plain">' + arr(w.notes).map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + '</ul>' : "";
+    var chg = (arr(w.added).length ? kv("Added since last run", esc(arr(w.added).join(", "))) : "") + (arr(w.removed).length ? kv("Removed since last run", esc(arr(w.removed).join(", "))) : "");
+    return '<section class="card"><h3>Stocks followed</h3>' + kv("Source", esc(w.source)) + kv("Stocks used", esc(w.used) + (w.requested && w.requested !== w.used ? " of " + esc(w.requested) + " listed" : "")) + chg + notes +
+      '<details><summary>All ' + esc(arr(w.tickers).length) + ' tickers</summary><p class="s">' + esc(arr(w.tickers).join(", ")) + '</p></details>' +
+      '<p class="note">To change the list, edit watchlist.txt in your GitHub repository (tap the file, then the pencil) and run "Weekly forecast".</p></section>';
+  }
+
+  // Trust tab -------------------------------------------------------------
+  function paperTrust(b, title, blurb) {
+    if (!b) return "";
+    var out = paperStatus(b, title);
+    if (!b.available) return out;
+    var more = "";
+    if (b.weeks > 0) {
+      more = kv("Weeks that beat the basket", esc(b.weeks_beat_basket) + " of " + esc(b.weeks)) +
+        kv("Versus the basket (+ ahead, - behind)", signed(b.vs_basket_pts, 1).replace(/%$/, "") + " points") + kv("Versus the S&amp;P 500 (+ ahead, - behind)", signed(b.vs_spx_pts, 1).replace(/%$/, "") + " points") +
+        kv("Worst fall from a peak", signed(b.max_drawdown_pct, 1)) + kv("Best and worst week", signed(b.best.ret_pct, 1) + " and " + signed(b.worst.ret_pct, 1)) +
+        kv("Average traded each week", num(b.avg_turnover_pct, 0) + "% of the account") + (isNum(b.t) ? kv("t-statistic vs basket (needs 2 or more)", num(b.t, 2)) : "");
+      var rec = arr(b.recent).map(function (r) {
+        return '<div class="kv"><span>' + esc(r.entry) + ' to ' + esc(r.exit) + '</span><span>' + signed(r.ret_pct, 2) + ' <span class="s">(basket ' + signed(r.basket_pct, 2) + ')</span></span></div>';
+      }).join("");
+      more += '<details><summary>Recent weeks</summary>' + rec + '</details>';
+    }
+    var notes = arr(b.notes).length ? '<ul class="plain">' + arr(b.notes).map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") + '</ul>' : "";
+    return out.replace(/<\/section>$/, '<p class="note">' + esc(blurb) + '</p>' + more + notes + '</section>');
+  }
+
+  function growthScore(d) {
+    var g = d.growth;
+    if (!g || !g.available || !g.scorecard) return "";
+    var sc = g.scorecard;
+    var out = '<section class="card"><div class="row"><h3>Does the growth score work?</h3>' + verdictPill(sc.verdict) + '</div>' +
+      '<p class="note" style="margin-top:2px">Each week every stock\'s score is saved. Once the holding period has passed, did higher scores go on to beat lower ones? No verdict is given before ' + esc(sc.min_weeks) + ' weeks.</p>' +
+      kv("Weeks scored", esc(sc.weeks) + (sc.pending ? " (" + esc(sc.pending) + " too recent)" : ""));
+    if (sc.weeks > 0) {
+      out += kv("Average rank correlation (0 = no link)", num(sc.mean_ic, 3)) + kv("Weeks with a positive link", pct(sc.hit_rate)) +
+        (isNum(sc.spread_pct) ? kv("Top-" + esc(g.n) + " minus the rest, per week", signed(sc.spread_pct, 2)) : "");
+      var parts = arr(sc.parts);
+      if (parts.length) {
+        out += '<details><summary>Which part is ranking stocks best?</summary>' + parts.map(function (p) { return kv(esc(p.label), num(p.mean_ic, 3)); }).join("") +
+          '<p class="note">Rank correlation of each part on its own. After enough weeks this shows which of the four parts deserves more or less weight.</p></details>';
+      }
+    }
+    return out + '</section>';
+  }
+
+  function trustGlobal(d) {
+    var g = d.global, t = g && g.test;
+    var out = '<section class="card"><h3>Do the global drivers help?</h3>';
+    if (!t) return out + '<p class="note">Not tested yet. The first monthly health check runs this test.</p></section>';
+    out += '<p class="note" style="margin-top:2px">More data is not the same as more accuracy. Each model was tested year by year with and without the extra global drivers (rates, currencies, commodities, credit, regions, and how sensitive each stock is to them). They are only used where they did clearly better.' +
+      (t.updated ? " Last tested " + esc(t.updated) + "." : "") + '</p>';
+    if (!t.ran) {
+      return out + '<p class="note">' + (t.out_of_time ? "The test ran out of time this month and will be tried again next month." : "The test has not run yet.") + '</p></section>';
+    }
+    var s = t.stocks;
+    if (s) {
+      out += '<div class="row" style="margin-top:8px"><h4 style="margin:0">Stock ranker</h4><span class="pill ' + (s.use ? "good" : "") + '">' + (s.use ? "uses them" : "not used") + '</span></div>' +
+        kv("AUC without and with", num(s.auc_base, 3) + " and " + num(s.auc_macro, 3)) +
+        (s.years ? kv("Test years improved", esc(s.years_won) + " of " + esc(s.years) + " (needs " + pct(s.need_share) + ")") : "") +
+        (isNum(s.gain) ? kv("Average yearly AUC gain", sgn(s.gain, 4) + " (needs " + sgn(s.need_gain, 3) + ")") : "") + '<div class="s">' + esc(s.reason) + '</div>';
+    }
+    arr(t.markets).forEach(function (m) {
+      out += '<details><summary>' + esc(m.name) + ': ' + (m.use ? "uses them" : "not used") + '</summary>' +
+        kv("Direction AUC, without and with", num((m.auc_up || [])[0], 3) + " and " + num((m.auc_up || [])[1], 3)) +
+        kv("Crash AUC, without and with", num((m.auc_crash || [])[0], 3) + " and " + num((m.auc_crash || [])[1], 3)) +
+        kv("Volatility gain vs naive, without and with", num((m.vol_improve_pct || [])[0], 1) + "% and " + num((m.vol_improve_pct || [])[1], 1) + "%") +
+        '<div class="s">Won ' + esc(m.wins) + ', lost ' + esc(m.losses) + ' of 3 yardsticks (needs 2 wins, no losses).</div></details>';
+    });
+    return out + '</section>';
   }
 
   // ------------------------------------------------------------------ trust
@@ -629,6 +910,9 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
       '<h2>Markets: historical test</h2>' + trustMarkets(d) +
       '<h2>Stocks: historical test</h2>' + trustStocks(d) +
       '<h2>Live scorecard</h2>' + scorecard(d) +
+      '<h2>Paper trading</h2>' + paperTrust((d.paper || {}).growth, "Growth paper portfolio", "Buys the Growth watch top stocks, weighted by score, and swaps them every week. Compared with an equal-weight basket of every stock the app follows (the fair test of whether picking helped) and the S&P 500.") +
+      paperTrust((d.paper || {}).model, "Model top-picks paper portfolio", "The model's own top picks, sized by the market-risk scaler, swapped every week. Compared on the same terms.") + growthScore(d) +
+      '<h2>Global drivers</h2>' + trustGlobal(d) +
       '<h2>News and company data</h2>' + trustNews(d) + trustFund(d) +
       '<h2>Known limits</h2><section class="card"><ul class="plain">' +
       '<li>Index trades are assumed to happen at the close the signal was computed on.</li>' +
@@ -636,11 +920,13 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
       '<li>Cash earns nothing, and there are no taxes, spreads or market impact beyond the flat cost.</li>' +
       '<li>News tone and company ratios are context. The model does not use them unless a test on this tab shows they help.</li>' +
       '<li>Company ratios are today\'s snapshots, ranked within a short list of large stocks and not adjusted for sector.</li>' +
+      '<li>Paper trading uses closing prices and a flat cost. Real orders would get different prices, and some stocks are harder to trade than others.</li>' +
+      '<li>A Growth watch of 20 stocks can still be one bet: many of the picks tend to rise and fall together.</li>' +
       '<li>Past results, however carefully tested, do not predict future returns.</li></ul></section>';
   }
 
   // ------------------------------------------------------------------ shell
-  var TABS = [["overview", "Overview"], ["markets", "Markets"], ["stocks", "Stocks"], ["trust", "Trust"]];
+  var TABS = [["overview", "Overview"], ["growth", "Growth"], ["markets", "Markets"], ["stocks", "Stocks"], ["trust", "Trust"]];
   var DATA = null;
 
   function currentTab() {
@@ -651,7 +937,8 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
   function render() {
     var d = DATA, tab = currentTab();
     window.__days = (d.horizons || {}).market_days;
-    var body = tab === "markets" ? tabMarkets(d) : tab === "stocks" ? tabStocks(d) : tab === "trust" ? tabTrust(d) : tabOverview(d);
+    var body = tab === "markets" ? tabMarkets(d) : tab === "stocks" ? tabStocks(d) : tab === "trust" ? tabTrust(d) :
+      tab === "growth" ? tabGrowth(d) : tabOverview(d);
     var nav = '<nav class="tabs" aria-label="Sections">' + TABS.map(function (t) {
       return '<a href="#' + t[0] + '"' + (t[0] === tab ? ' class="on" aria-current="page"' : "") + '>' + t[1] + '</a>';
     }).join("") + '</nav>';
