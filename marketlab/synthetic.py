@@ -58,6 +58,25 @@ class World:
             c = 80 * np.exp(np.cumsum(0.25 * f + rng.normal(0, 0.002, n)))
         elif t == "LQD":
             c = 110 * np.exp(np.cumsum(rng.normal(0.00005, 0.003, n)))
+        # ---- optional global drivers (never used by the original features, so older results do not change)
+        elif t == "^FVX":
+            c = np.clip(self.series("^TNX")[0] - 0.3 + 0.2 * np.cumsum(rng.normal(0, 0.01, n)), 0.1, 6.0)
+        elif t == "^TYX":
+            c = np.clip(self.series("^TNX")[0] + 0.4 + 0.2 * np.cumsum(rng.normal(0, 0.01, n)), 0.3, 6.5)
+        elif t == "^VIX3M":
+            v3 = pd.Series(self.series("^VIX")[0]).rolling(40, min_periods=1).mean().to_numpy()
+            c = np.clip(0.9 * v3 + 3 + rng.normal(0, 0.3, n), 10, 70)
+        elif t in ("BZ=F", "NG=F", "SI=F"):
+            base = {"BZ=F": 65, "NG=F": 3, "SI=F": 18}[t]
+            c = base * np.exp(np.cumsum(rng.normal(0, 0.018, n) + (0.3 * f if t == "BZ=F" else 0)))
+        elif t in ("EURUSD=X", "GBPUSD=X", "JPY=X"):
+            base = {"EURUSD=X": 1.1, "GBPUSD=X": 1.3, "JPY=X": 110}[t]
+            c = base * np.exp(np.cumsum(rng.normal(0, 0.005, n)))
+        elif t == "TLT":
+            c = 110 * np.exp(np.cumsum(rng.normal(0, 0.006, n)))
+        elif t in ("EEM", "FXI", "SOXX", "IWM", "RSP"):
+            load = {"EEM": 0.9, "FXI": 0.8, "SOXX": 1.4, "IWM": 1.1, "RSP": 0.95}[t]
+            c = 50 * np.exp(np.cumsum(load * f + rng.normal(0, 0.004, n)))
         else:                                               # a stock
             beta = 0.7 + 0.6 * rng.random()
             idio = rng.normal(0, 0.011, n) * (0.8 + 0.4 * rng.random())
