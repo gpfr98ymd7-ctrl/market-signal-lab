@@ -1,10 +1,11 @@
 {
- "computed": "2026-11-13",
+ "computed": "2026-11-15",
  "design": 2,
  "result": {
   "available": false,
-  "reason": "No news history yet.",
   "have_days": 0,
-  "need_days": 1100
+  "need_days": 1100,
+  "first": "2026-08-18",
+  "reason": "Needs about 1100 trading days of news history; 0 are usable so far, roughly 54 more months of archiving."
  }
 }
