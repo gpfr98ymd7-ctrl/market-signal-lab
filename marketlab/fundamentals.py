@@ -305,3 +305,16 @@ def update(log_dir, ds, now, fetcher=None, pause=None, budget=None, log=print):
                   "n": int(len(g)), "universe": int(len(ds.stocks)), "by_ticker": by,
                   "scorecard": scorecard(snaps, ds.close), "weeks_saved": int(snaps["snap_date"].nunique())})
     return block
+
+
+def known_names(log_dir):
+    """Ticker -> most recent company short name from the saved snapshots (for news search phrases)."""
+    try:
+        snaps = read_snapshots(Path(log_dir) / "fundamentals.csv")
+        if not len(snaps):
+            return {}
+        s = snaps.sort_values("snap_date").dropna(subset=["shortName"])
+        s = s[s["shortName"].astype(str).str.len() > 0]
+        return dict(zip(s["ticker"], s["shortName"].astype(str)))
+    except Exception:
+        return {}
